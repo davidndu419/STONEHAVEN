@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function profile() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function isSuperAdmin() { return signedIn() && profile().role == "superadmin"; }
+    function isSubAdmin() { return signedIn() && profile().role == "sub-admin"; }
+    function ownsAdminScope(adminId) {
+      return isSuperAdmin() || (isSubAdmin() && profile().adminId == adminId);
+    }
+    function isOwner(userId) { return signedIn() && request.auth.uid == userId; }
+
+    match /users/{userId} {
+      allow create: if isOwner(userId);
+      allow read: if isOwner(userId) || isSuperAdmin()
+        || (isSubAdmin() && resource.data.adminId == profile().adminId);
+      allow update: if isSuperAdmin()
+        || (isSubAdmin() && resource.data.adminId == profile().adminId)
+        || (isOwner(userId)
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.adminId == resource.data.adminId
+          && request.resource.data.availableBalance == resource.data.availableBalance
+          && request.resource.data.referralBalance == resource.data.referralBalance);
+      allow delete: if isSuperAdmin();
+    }
+
+    match /{collection}/{documentId} {
+      allow read: if signedIn() && (
+        isSuperAdmin()
+        || resource.data.userId == request.auth.uid
+        || ownsAdminScope(resource.data.adminId)
+        || (collection == "depositMethods" && resource.data.active == true)
+      );
+      allow create: if signedIn() && (
+        request.resource.data.userId == request.auth.uid
+        || ownsAdminScope(request.resource.data.adminId)
+      );
+      allow update, delete: if signedIn() && ownsAdminScope(resource.data.adminId);
+    }
+  }
+}
