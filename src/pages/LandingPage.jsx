@@ -35,6 +35,19 @@ function SectionTitle({ kicker, title, text, center = false }) {
   );
 }
 
+function PublicCalculator() {
+  const [type, setType] = useState("crypto"); const [capital, setCapital] = useState(200); const [duration, setDuration] = useState(3);
+  const weekly = plans.find((item) => item[0] === Number(capital)) || plans[0];
+  const flashPlans = [[50, 80], [100, 150], [200, 300], [300, 450], [500, 700], [1000, 1300]];
+  const flash = flashPlans.find((item) => item[0] === Number(capital)) || flashPlans[0];
+  const weeks = duration === 2 ? 8 : 13;
+  const total = type === "flash" ? flash[0] : weekly[0] * weeks;
+  const projected = type === "flash" ? flash[1] : duration === 2 ? weekly[1] : weekly[2];
+  const profit = projected - total;
+  const options = type === "flash" ? flashPlans.map((item) => item[0]) : plans.map((item) => item[0]);
+  return <section className="bg-navy px-5 py-28 text-white"><div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[.75fr_1.25fr]"><SectionTitle kicker="Investment calculator" title="Model your plan before you begin." text="Calculator values follow the current Stonehaven plan schedule. Final terms are snapshotted when a plan is created." /><div className="dark-glass p-7"><div className="grid gap-4 sm:grid-cols-3"><div><label className="mb-2 block text-[10px] uppercase tracking-widest text-white/35">Plan type</label><select className="w-full rounded-xl border border-white/10 bg-white/[.07] px-4 py-3" value={type} onChange={(e) => { setType(e.target.value); setCapital(e.target.value === "flash" ? 50 : 200); }}><option className="text-navy" value="flash">Flash</option><option className="text-navy" value="crypto">Crypto</option><option className="text-navy" value="stock">Stock</option></select></div><div><label className="mb-2 block text-[10px] uppercase tracking-widest text-white/35">{type === "flash" ? "Capital" : "Weekly capital"}</label><select className="w-full rounded-xl border border-white/10 bg-white/[.07] px-4 py-3" value={capital} onChange={(e) => setCapital(Number(e.target.value))}>{options.map((value) => <option className="text-navy" key={value} value={value}>${value.toLocaleString()}</option>)}</select></div><div><label className="mb-2 block text-[10px] uppercase tracking-widest text-white/35">Duration</label><select disabled={type === "flash"} className="w-full rounded-xl border border-white/10 bg-white/[.07] px-4 py-3 disabled:opacity-50" value={duration} onChange={(e) => setDuration(Number(e.target.value))}>{type === "flash" ? <option className="text-navy">24 hours</option> : <><option className="text-navy" value={2}>2 months</option><option className="text-navy" value={3}>3 months</option></>}</select></div></div><div className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-white/10 sm:grid-cols-4">{[["Total capital", total], ["Projected return", projected], ["Net profit", profit], ["ROI", `${((profit / total) * 100).toFixed(1)}%`]].map(([label, value]) => <div key={label} className="bg-navy p-4"><p className="text-[9px] uppercase tracking-widest text-white/35">{label}</p><p className="mt-2 font-display text-xl font-bold text-gold">{typeof value === "number" ? `$${value.toLocaleString()}` : value}</p></div>)}</div><Link to="/register" className="btn-primary mt-6 w-full">Start earning now <ArrowRight size={16} /></Link></div></div></section>;
+}
+
 export default function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [testimonial, setTestimonial] = useState(0);
@@ -149,6 +162,8 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      <PublicCalculator />
 
       <section className="bg-navy px-5 py-28 text-white">
         <div className="mx-auto max-w-7xl">

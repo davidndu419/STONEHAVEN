@@ -29,8 +29,12 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .section-kicker { @apply text-xs font-bold uppercase tracking-[0.25em] text-gold; }
   .status-pending { @apply bg-amber-100 text-amber-800; }
   .status-approved, .status-active, .status-completed { @apply bg-emerald-100 text-emerald-800; }
+  .status-flash-active, .status-flash-done { @apply bg-emerald-100 text-emerald-800; }
   .status-rejected, .status-suspended { @apply bg-red-100 text-red-800; }
+  .status-deleted { @apply bg-red-100 text-red-800; }
   .status-hold { @apply bg-blue-100 text-blue-800; }
+  .status-frozen { @apply bg-blue-100 text-blue-800; }
+  .status-paused { @apply bg-amber-100 text-amber-800; }
 }
 
 .hero-grid {

@@ -12,21 +12,41 @@ import {
   where,
 } from "firebase/firestore";
 import { db, firebaseEnabled } from "./firebase";
-import { seedDeposits, seedMethods, seedTransactions, seedUsers, seedWithdrawals } from "../data/demo";
+import {
+  seedCoins, seedDeposits, seedFlashSettings, seedFlashTiers, seedInvestments, seedMethods,
+  seedNotifications, seedStocks, seedTransactions, seedUsers, seedWithdrawals,
+} from "../data/demo";
 
 const KEY = "stonehaven-demo-db-v1";
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
 function initializeLocal() {
   const existing = localStorage.getItem(KEY);
-  if (existing) return JSON.parse(existing);
   const initial = {
     users: clone(seedUsers),
     depositMethods: clone(seedMethods),
     deposits: clone(seedDeposits),
     withdrawals: clone(seedWithdrawals),
     transactions: clone(seedTransactions),
+    flashSettings: clone(seedFlashSettings),
+    flashTiers: clone(seedFlashTiers),
+    coins: clone(seedCoins),
+    stocks: clone(seedStocks),
+    investments: clone(seedInvestments),
+    notifications: clone(seedNotifications),
   };
+  if (existing) {
+    const current = JSON.parse(existing);
+    let changed = false;
+    Object.entries(initial).forEach(([name, values]) => {
+      if (!Array.isArray(current[name])) {
+        current[name] = values;
+        changed = true;
+      }
+    });
+    if (changed) localStorage.setItem(KEY, JSON.stringify(current));
+    return current;
+  }
   localStorage.setItem(KEY, JSON.stringify(initial));
   return initial;
 }

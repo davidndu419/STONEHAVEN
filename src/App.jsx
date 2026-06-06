@@ -1,7 +1,9 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import LandingPage from "./pages/LandingPage";
 import { ForgotPasswordPage, LoginPage, OnboardingPage, RegisterPage } from "./pages/AuthPages";
-import { DepositPage, ReferralsPage, TransactionsPage, UserDashboard, WithdrawalPage } from "./pages/UserPages";
+import { DepositPage, ReferralsPage, SettingsPage, TransactionsPage, UserDashboard, WithdrawalPage } from "./pages/UserPages";
+import { CryptoInvestmentPage, EarningsPage, FlashInvestmentPage, PortfolioPage, StockInvestmentPage, StockResearchPage } from "./pages/InvestmentPages";
+import { AdminInvestmentsPage, CoinLibraryPage, FlashAdminPage, StockLibraryPage } from "./pages/AdminInvestmentPages";
 import {
   AdminDashboard, AdminReferralsPage, DepositMethodsPage, DepositsAdminPage,
   OnboardingLinksPage, PlatformBrandingPage, UsersAdminPage, WithdrawalsAdminPage,
@@ -48,12 +50,20 @@ export default function App() {
 
       <Route element={<ProtectedRoute roles={["user"]} />}>
         <Route path="/onboarding" element={<OnboardingPage />} />
-        <Route element={<DashboardLayout />}>
-          <Route path="/dashboard" element={<UserDashboard />} />
-          <Route path="/deposit" element={<DepositPage />} />
-          <Route path="/withdraw" element={<WithdrawalPage />} />
-          <Route path="/referrals" element={<ReferralsPage />} />
-          <Route path="/transactions" element={<TransactionsPage />} />
+        <Route path="/dashboard" element={<DashboardLayout />}>
+          <Route index element={<UserDashboard />} />
+          <Route path="flash-investment" element={<FlashInvestmentPage />} />
+          <Route path="crypto-investment" element={<CryptoInvestmentPage />} />
+          <Route path="stock-investment" element={<StockInvestmentPage />} />
+          <Route path="stock-investment/:stockId" element={<StockResearchPage />} />
+          <Route path="portfolio" element={<PortfolioPage />} />
+          <Route path="earnings" element={<EarningsPage />} />
+          <Route path="deposit" element={<DepositPage />} />
+          <Route path="withdraw" element={<WithdrawalPage />} />
+          <Route path="referrals" element={<ReferralsPage />} />
+          <Route path="transactions" element={<TransactionsPage />} />
+          <Route path="settings" element={<SettingsPage />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Route>
 
@@ -61,6 +71,10 @@ export default function App() {
         <Route element={<DashboardLayout admin />}>
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/admin/users" element={<UsersAdminPage />} />
+          <Route path="/admin/investments" element={<AdminInvestmentsPage />} />
+          <Route path="/admin/flash" element={<FlashAdminPage />} />
+          <Route path="/admin/coins" element={<CoinLibraryPage />} />
+          <Route path="/admin/stocks" element={<StockLibraryPage />} />
           <Route path="/admin/deposits" element={<DepositsAdminPage />} />
           <Route path="/admin/withdrawals" element={<WithdrawalsAdminPage />} />
           <Route path="/admin/methods" element={<DepositMethodsPage />} />
@@ -72,6 +86,10 @@ export default function App() {
         <Route element={<DashboardLayout admin superAdmin />}>
           <Route path="/superadmin/dashboard" element={<AdminDashboard superAdmin />} />
           <Route path="/superadmin/users" element={<UsersAdminPage superAdmin />} />
+          <Route path="/superadmin/investments" element={<AdminInvestmentsPage />} />
+          <Route path="/superadmin/flash" element={<FlashAdminPage />} />
+          <Route path="/superadmin/coins" element={<CoinLibraryPage />} />
+          <Route path="/superadmin/stocks" element={<StockLibraryPage />} />
           <Route path="/superadmin/deposits" element={<DepositsAdminPage />} />
           <Route path="/superadmin/withdrawals" element={<WithdrawalsAdminPage />} />
           <Route path="/superadmin/methods" element={<DepositMethodsPage />} />

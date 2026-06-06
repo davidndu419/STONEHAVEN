@@ -7,6 +7,7 @@ import { useAuth } from "../context/AuthContext";
 import { dataService } from "../lib/dataService";
 import { uploadToCloudinary } from "../lib/cloudinary";
 import { createManagedAuthUser } from "../lib/firebase";
+import { approveInvestmentDeposit, rejectInvestmentDeposit } from "../lib/investmentEngine";
 import { EmptyState, Modal, PageHeader, StatusBadge } from "../components/UI";
 
 const money = (value = 0) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
@@ -75,6 +76,8 @@ function ApprovalTable({ type }) {
       await dataService.updateUser(item.userId, { [field]: user[field] - item.amount });
     }
     await dataService.update(type, item.id, { status, reviewedAt: new Date().toISOString() });
+    if (type === "deposits" && status === "approved") await approveInvestmentDeposit(item);
+    if (type === "deposits" && status === "rejected") await rejectInvestmentDeposit(item);
     await dataService.log({ userId: item.userId, adminId: item.adminId, type: `${type === "deposits" ? "deposit" : "withdrawal"}_${status}`, label: `${type === "deposits" ? "Deposit" : "Withdrawal"} ${status}`, amount: item.amount, status });
     load();
   }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
 import {
   ArrowDownToLine, ArrowUpFromLine, BellRing, CheckCircle2, Clipboard, Clock3,
   Copy, DollarSign, History, Landmark, Link2, LockKeyhole, RefreshCw, TrendingUp, Upload, Users, WalletCards,
@@ -8,13 +9,24 @@ import { dataService } from "../lib/dataService";
 import { uploadToCloudinary } from "../lib/cloudinary";
 import { EmptyState, PageHeader, StatusBadge } from "../components/UI";
 import { TradingViewChart } from "../components/TradingViewWidget";
+import { InvestmentCard } from "../components/InvestmentUI";
+import { processInvestmentTimers } from "../lib/investmentEngine";
 
 const money = (value = 0) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
 const date = (value) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
 
 export function UserDashboard() {
   const { user } = useAuth();
-  const [symbol, setSymbol] = useState("BINANCE:BTCUSDT");
+  const navigate = useNavigate();
+  const { activeAssetMode } = useOutletContext();
+  const [symbol, setSymbol] = useState(activeAssetMode === "stocks" ? "NASDAQ:AAPL" : "BINANCE:BTCUSDT");
+  const [investments, setInvestments] = useState([]);
+  useEffect(() => { processInvestmentTimers(user.userId).then((items) => setInvestments(items.filter((item) => !["completed", "deleted", "flash done"].includes(item.status)))); }, [user.userId]);
+  useEffect(() => { setSymbol(activeAssetMode === "stocks" ? "NASDAQ:AAPL" : "BINANCE:BTCUSDT"); }, [activeAssetMode]);
+  const visibleInvestments = investments.filter((item) => item.type === (activeAssetMode === "stocks" ? "stock" : "crypto")).slice(0, 2);
+  const marketSymbols = activeAssetMode === "stocks"
+    ? [["NASDAQ:AAPL", "AAPL"], ["NASDAQ:NVDA", "NVDA"], ["NASDAQ:MSFT", "MSFT"]]
+    : [["BINANCE:BTCUSDT", "BTC"], ["BINANCE:ETHUSDT", "ETH"], ["BINANCE:SOLUSDT", "SOL"]];
   const total = (user?.availableBalance || 0) + (user?.referralBalance || 0) + (user?.lockedBalance || 0);
   const cards = [
     ["Available balance", user?.availableBalance, WalletCards, "Ready to withdraw"],
@@ -33,8 +45,8 @@ export function UserDashboard() {
         {cards.map(([label, value, Icon, note], index) => <div key={label} className={`glass-card p-5 ${index === 3 ? "bg-navy text-white" : ""}`}><div className="flex items-start justify-between"><div><p className={`text-[10px] font-bold uppercase tracking-[.16em] ${index === 3 ? "text-white/35" : "text-slate-400"}`}>{label}</p><p className={`display-title mt-3 text-3xl ${index === 3 ? "text-white" : "text-navy"}`}>{money(value)}</p></div><span className={`grid h-10 w-10 place-items-center rounded-xl ${index === 3 ? "bg-gold/15 text-gold" : "bg-gold/10 text-gold"}`}><Icon size={19} /></span></div><p className={`mt-5 text-[11px] ${index === 3 ? "text-white/35" : "text-slate-400"}`}>{note}</p></div>)}
       </div>
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.45fr_.55fr]">
-        <div className="glass-card overflow-hidden p-3"><div className="flex flex-wrap items-center justify-between gap-3 px-3 py-3"><div><p className="text-xs font-bold uppercase tracking-widest text-slate-400">Market intelligence</p><p className="font-display text-xl font-bold text-navy">Live market chart</p></div><div className="flex gap-1 rounded-xl bg-stone p-1">{[["BINANCE:BTCUSDT", "BTC"], ["BINANCE:ETHUSDT", "ETH"], ["NASDAQ:AAPL", "AAPL"]].map(([value, label]) => <button key={value} onClick={() => setSymbol(value)} className={`rounded-lg px-3 py-2 text-xs font-bold ${symbol === value ? "bg-navy text-white" : "text-slate-400"}`}>{label}</button>)}</div></div><TradingViewChart symbol={symbol} /></div>
-        <div className="glass-card p-6"><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-widest text-slate-400">Active investments</p><h2 className="display-title mt-1 text-2xl text-navy">Plan activity</h2></div><TrendingUp className="text-gold" /></div><div className="mt-8 rounded-xl border border-dashed border-slate-300 p-6 text-center"><Clock3 className="mx-auto text-slate-300" /><p className="mt-4 font-display text-lg font-bold text-navy">No active plans yet</p><p className="mt-2 text-xs leading-5 text-slate-400">Your Phase 2 investments and weekly progress will appear here.</p></div><div className="mt-5 rounded-xl bg-navy p-5 text-white"><p className="text-[10px] uppercase tracking-widest text-white/35">Portfolio readiness</p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full w-2/3 rounded-full bg-gold" /></div><p className="mt-3 text-xs text-white/50">Profile foundation complete</p></div></div>
+        <div className="glass-card overflow-hidden p-3"><div className="flex flex-wrap items-center justify-between gap-3 px-3 py-3"><div><p className="text-xs font-bold uppercase tracking-widest text-slate-400">{activeAssetMode === "stocks" ? "Equity intelligence" : "Digital asset intelligence"}</p><p className="font-display text-xl font-bold text-navy">Live {activeAssetMode === "stocks" ? "stock" : "crypto"} chart</p></div><div className="flex gap-1 rounded-xl bg-stone p-1">{marketSymbols.map(([value, label]) => <button key={value} onClick={() => setSymbol(value)} className={`rounded-lg px-3 py-2 text-xs font-bold ${symbol === value ? "bg-navy text-white" : "text-slate-400"}`}>{label}</button>)}</div></div><TradingViewChart symbol={symbol} /></div>
+        <div className="space-y-4">{visibleInvestments.length ? visibleInvestments.map((investment) => <InvestmentCard key={investment.id} investment={investment} onDeposit={(item) => navigate(`/dashboard/deposit?investment=${item.id}&week=${(item.completedWeeks || 0) + 1}&amount=${item.capital || item.weeklyCapital}&asset=${item.ticker}`)} onDetails={() => navigate("/dashboard/portfolio")} />) : <div className="glass-card p-6"><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-widest text-slate-400">Active {activeAssetMode === "stocks" ? "stock" : "crypto"} investments</p><h2 className="display-title mt-1 text-2xl text-navy">Plan activity</h2></div><TrendingUp className="text-gold" /></div><div className="mt-8 rounded-xl border border-dashed border-slate-300 p-6 text-center"><Clock3 className="mx-auto text-slate-300" /><p className="mt-4 font-display text-lg font-bold text-navy">No active {activeAssetMode === "stocks" ? "stock" : "crypto"} plans</p><button onClick={() => navigate(activeAssetMode === "stocks" ? "/dashboard/stock-investment" : "/dashboard/crypto-investment")} className="btn-primary mt-5">Explore plans</button></div></div>}</div>
       </div>
     </div>
   );
@@ -42,18 +54,24 @@ export function UserDashboard() {
 
 export function DepositPage() {
   const { user } = useAuth();
+  const [params] = useSearchParams();
+  const investmentId = params.get("investment") || "";
+  const investmentWeek = Number(params.get("week") || 0);
+  const requiredAmount = params.get("amount") || "";
+  const asset = params.get("asset") || "GEN";
   const [methods, setMethods] = useState([]); const [selected, setSelected] = useState(null);
   const [amount, setAmount] = useState(""); const [hash, setHash] = useState(""); const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false); const [done, setDone] = useState(false); const [error, setError] = useState("");
-  const reference = useMemo(() => `SH-${user?.userId?.slice(-6).toUpperCase()}-GEN-W1`, [user]);
+  const reference = useMemo(() => `SH-${user?.userId?.slice(-6).toUpperCase()}-${asset.toUpperCase()}-W${investmentWeek || 1}`, [user, asset, investmentWeek]);
+  useEffect(() => { if (requiredAmount) setAmount(requiredAmount); }, [requiredAmount]);
   useEffect(() => { dataService.list("depositMethods", user.adminId).then((items) => { const active = items.filter((item) => item.active); setMethods(active); setSelected(active[0] || null); }); }, [user.adminId]);
 
   async function submit(event) {
     event.preventDefault(); setBusy(true); setError("");
     try {
       const proofUrl = await uploadToCloudinary(file);
-      await dataService.create("deposits", { userId: user.userId, userName: user.name, adminId: user.adminId, methodId: selected.id, methodName: selected.name, amount: Number(amount), reference, transactionHash: hash, proofUrl, status: "pending" });
-      await dataService.log({ userId: user.userId, adminId: user.adminId, type: "deposit_submitted", label: `Deposit submitted via ${selected.name}`, amount: Number(amount), status: "pending" });
+      await dataService.create("deposits", { userId: user.userId, userName: user.name, adminId: user.adminId, methodId: selected.id, methodName: selected.name, amount: Number(amount), reference, transactionHash: hash, proofUrl, status: "pending", investmentId, week: investmentWeek || undefined, depositType: investmentId ? "investment" : "general" });
+      await dataService.log({ userId: user.userId, adminId: user.adminId, type: investmentId ? "weekly_deposit" : "deposit_submitted", label: investmentId ? `${asset} Week ${investmentWeek || 1} deposit submitted` : `Deposit submitted via ${selected.name}`, amount: Number(amount), status: "pending" });
       setDone(true);
     } catch (err) { setError(err.message); } finally { setBusy(false); }
   }
@@ -67,7 +85,7 @@ export function DepositPage() {
           {error && <div className="mb-5 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</div>}
           <div className="rounded-xl bg-navy p-5 text-white"><p className="text-[10px] uppercase tracking-widest text-white/35">Send payment to</p><div className="mt-3 flex items-center justify-between gap-3"><code className="break-all text-sm text-gold">{selected?.details}</code><button type="button" onClick={() => navigator.clipboard.writeText(selected?.details)} className="shrink-0 rounded-lg bg-white/10 p-2"><Copy size={16} /></button></div><p className="mt-4 text-xs leading-5 text-white/45">{selected?.extraInfo}</p></div>
           <div className="mt-5"><label className="label">Deposit reference</label><div className="relative"><input className="field bg-slate-50 pr-12" readOnly value={reference} /><Clipboard className="absolute right-4 top-3.5 text-slate-400" size={18} /></div></div>
-          <div className="mt-5 grid gap-5 sm:grid-cols-2"><div><label className="label">Amount sent (USD)</label><input className="field" type="number" min="1" required value={amount} onChange={(e) => setAmount(e.target.value)} /></div><div><label className="label">Transaction hash / reference</label><input className="field" required value={hash} onChange={(e) => setHash(e.target.value)} /></div></div>
+          <div className="mt-5 grid gap-5 sm:grid-cols-2"><div><label className="label">Amount sent (USD)</label><input className="field" type="number" min="1" required readOnly={Boolean(requiredAmount)} value={amount} onChange={(e) => setAmount(e.target.value)} /></div><div><label className="label">Transaction hash / reference</label><input className="field" required value={hash} onChange={(e) => setHash(e.target.value)} /></div></div>
           <label className="mt-5 block cursor-pointer rounded-xl border-2 border-dashed border-slate-200 p-6 text-center hover:border-gold"><Upload className="mx-auto text-gold" size={24} /><p className="mt-3 text-sm font-bold text-navy">{file ? file.name : "Upload payment proof"}</p><p className="mt-1 text-xs text-slate-400">PNG, JPG, or WEBP</p><input hidden type="file" accept="image/*" required onChange={(e) => setFile(e.target.files[0])} /></label>
           <button disabled={busy} className="btn-primary mt-6 w-full">{busy ? "Submitting securely..." : "Submit deposit for review"} <ArrowDownToLine size={17} /></button>
         </form>
@@ -116,4 +134,10 @@ export function TransactionsPage() {
       {loading ? <div className="glass-card grid h-56 place-items-center"><RefreshCw className="animate-spin text-gold" /></div> : items.length ? <div className="glass-card table-scroll overflow-x-auto"><table className="w-full min-w-[700px]"><thead><tr className="bg-navy text-left text-[10px] uppercase tracking-widest text-white/50"><th className="px-6 py-5">Event</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody>{items.map((item) => <tr key={item.id} className="border-b border-slate-100 text-sm last:border-0"><td className="px-6 py-5"><div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-lg bg-gold/10 text-gold"><History size={16} /></span><div><p className="font-bold text-navy">{item.label}</p><p className="mt-1 text-[10px] uppercase tracking-wider text-slate-400">{item.type.replaceAll("_", " ")}</p></div></div></td><td className="font-bold text-navy">{money(item.amount)}</td><td><StatusBadge status={item.status} /></td><td className="text-slate-500">{date(item.createdAt)}</td></tr>)}</tbody></table></div> : <EmptyState icon={History} title="No transactions yet" text="Deposits, withdrawals, referral bonuses, and administrative adjustments will be recorded here." />}
     </div>
   );
+}
+
+export function SettingsPage() {
+  const { user } = useAuth();
+  const { activeAssetMode, setActiveAssetMode } = useOutletContext();
+  return <div><PageHeader eyebrow="Preferences" title="Dashboard settings" description="Manage the default market displayed in your private client dashboard." /><div className="glass-card max-w-2xl p-7"><p className="label">Default asset mode</p><div className="grid gap-3 sm:grid-cols-2"><button onClick={() => setActiveAssetMode("crypto")} className={`rounded-xl border p-5 text-left ${activeAssetMode === "crypto" ? "border-gold bg-gold/10" : "border-slate-200"}`}><p className="font-bold text-navy">Crypto</p><p className="mt-1 text-xs text-slate-500">Digital assets and crypto investments</p></button><button onClick={() => setActiveAssetMode("stocks")} className={`rounded-xl border p-5 text-left ${activeAssetMode === "stocks" ? "border-gold bg-gold/10" : "border-slate-200"}`}><p className="font-bold text-navy">Stocks</p><p className="mt-1 text-xs text-slate-500">Global equities and stock investments</p></button></div><p className="mt-6 text-xs text-slate-400">Preference saved locally for {user.email}.</p></div></div>;
 }

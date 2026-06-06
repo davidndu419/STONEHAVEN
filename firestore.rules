@@ -9,6 +9,13 @@ service cloud.firestore {
       return isSuperAdmin() || (isSubAdmin() && profile().adminId == adminId);
     }
     function isOwner(userId) { return signedIn() && request.auth.uid == userId; }
+    function isScopedLibrary(collection) {
+      return collection == "depositMethods"
+        || collection == "flashSettings"
+        || collection == "flashTiers"
+        || collection == "coins"
+        || collection == "stocks";
+    }
 
     match /users/{userId} {
       allow create: if isOwner(userId);
@@ -29,7 +36,9 @@ service cloud.firestore {
         isSuperAdmin()
         || resource.data.userId == request.auth.uid
         || ownsAdminScope(resource.data.adminId)
-        || (collection == "depositMethods" && resource.data.active == true)
+        || (isScopedLibrary(collection)
+          && resource.data.adminId == profile().adminId
+          && resource.data.active == true)
       );
       allow create: if signedIn() && (
         request.resource.data.userId == request.auth.uid

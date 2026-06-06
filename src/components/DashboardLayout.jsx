@@ -1,23 +1,33 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
-  ArrowDownToLine, ArrowUpFromLine, Bell, ChevronLeft, ChevronRight, CreditCard,
-  History, Image, LayoutDashboard, Link2, LogOut, Menu, Settings, ShieldCheck, Users, WalletCards, X,
+  ArrowDownToLine, ArrowUpFromLine, BarChart3, Bell, Bitcoin, ChevronLeft, ChevronRight, CreditCard,
+  Flame, History, Image, LayoutDashboard, LineChart, Link2, LogOut, Menu, Settings, ShieldCheck, TrendingUp, Users, WalletCards, X,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { Brand } from "./UI";
 
 const userNav = [
   ["/dashboard", "Dashboard", LayoutDashboard],
-  ["/deposit", "Deposit", ArrowDownToLine],
-  ["/withdraw", "Withdraw", ArrowUpFromLine],
-  ["/referrals", "Referrals", Users],
-  ["/transactions", "Transactions", History],
+  ["/dashboard/flash-investment", "Flash Investment", Flame],
+  ["/dashboard/crypto-investment", "Crypto Investment", Bitcoin],
+  ["/dashboard/stock-investment", "Stock Investment", LineChart],
+  ["/dashboard/portfolio", "My Portfolio", TrendingUp],
+  ["/dashboard/earnings", "Earnings", BarChart3],
+  ["/dashboard/deposit", "Deposit", ArrowDownToLine],
+  ["/dashboard/withdraw", "Withdraw", ArrowUpFromLine],
+  ["/dashboard/referrals", "Referrals", Users],
+  ["/dashboard/transactions", "Transactions", History],
+  ["/dashboard/settings", "Settings", Settings],
 ];
 
 const adminNav = [
   ["dashboard", "Overview", LayoutDashboard],
   ["users", "Users", Users],
+  ["investments", "Investments", TrendingUp],
+  ["flash", "Flash settings", Flame],
+  ["coins", "Coin library", Bitcoin],
+  ["stocks", "Stock library", LineChart],
   ["deposits", "Deposits", ArrowDownToLine],
   ["withdrawals", "Withdrawals", ArrowUpFromLine],
   ["methods", "Deposit methods", CreditCard],
@@ -30,11 +40,16 @@ export default function DashboardLayout({ admin = false, superAdmin = false }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [activeAssetMode, setActiveAssetMode] = useState(() => localStorage.getItem("stonehaven-asset-mode") || user?.preference || "crypto");
   const base = superAdmin ? "/superadmin" : "/admin";
   const adminItems = superAdmin
     ? [...adminNav, ["onboarding-links", "Onboarding links", Link2], ["branding", "Platform branding", Image]]
     : adminNav;
   const navigation = admin ? adminItems.map(([path, label, Icon]) => [`${base}/${path}`, label, Icon]) : userNav;
+
+  useEffect(() => {
+    localStorage.setItem("stonehaven-asset-mode", activeAssetMode);
+  }, [activeAssetMode]);
 
   async function signOutUser() {
     await logout();
@@ -80,8 +95,8 @@ export default function DashboardLayout({ admin = false, superAdmin = false }) {
             <button onClick={() => setMobileOpen(true)} className="rounded-xl border border-slate-200 bg-white p-2.5 lg:hidden"><Menu size={20} /></button>
             {!admin && (
               <div className="hidden rounded-xl border border-slate-200 bg-white p-1 sm:flex">
-                <button className="rounded-lg bg-navy px-4 py-2 text-xs font-semibold text-white">Crypto</button>
-                <button className="rounded-lg px-4 py-2 text-xs font-semibold text-slate-500">Stocks</button>
+                <button onClick={() => setActiveAssetMode("crypto")} className={`rounded-lg px-4 py-2 text-xs font-semibold transition ${activeAssetMode === "crypto" ? "bg-navy text-white" : "text-slate-500 hover:text-navy"}`}>Crypto</button>
+                <button onClick={() => setActiveAssetMode("stocks")} className={`rounded-lg px-4 py-2 text-xs font-semibold transition ${activeAssetMode === "stocks" ? "bg-navy text-white" : "text-slate-500 hover:text-navy"}`}>Stocks</button>
               </div>
             )}
             {admin && <span className="text-xs font-bold uppercase tracking-[.18em] text-slate-400">{superAdmin ? "Super Admin Portal" : "Advisor Portal"}</span>}
@@ -95,7 +110,7 @@ export default function DashboardLayout({ admin = false, superAdmin = false }) {
               </button>
               {profileOpen && (
                 <div className="absolute right-0 mt-2 w-52 rounded-xl border border-slate-200 bg-white p-2 shadow-heritage">
-                  <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-stone"><Settings size={16} /> Settings</button>
+                  <button onClick={() => { navigate(admin ? `${base}/dashboard` : "/dashboard/settings"); setProfileOpen(false); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-stone"><Settings size={16} /> Settings</button>
                   <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-stone"><ShieldCheck size={16} /> Security</button>
                   <button onClick={signOutUser} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-burgundy hover:bg-red-50"><LogOut size={16} /> Sign out</button>
                 </div>
@@ -103,11 +118,11 @@ export default function DashboardLayout({ admin = false, superAdmin = false }) {
             </div>
           </div>
         </header>
-        <main className="p-4 pb-24 md:p-7 lg:pb-7"><Outlet /></main>
+        <main className="p-4 pb-24 md:p-7 lg:pb-7"><Outlet context={{ activeAssetMode, setActiveAssetMode }} /></main>
       </div>
       {!admin && (
         <nav className="fixed inset-x-3 bottom-3 z-40 flex justify-around rounded-2xl border border-white/10 bg-navy/95 p-2 shadow-heritage backdrop-blur-xl lg:hidden">
-          {userNav.slice(0, 5).map(([path, label, Icon]) => (
+          {[userNav[0], userNav[1], userNav[2], userNav[3], userNav[4]].map(([path, label, Icon]) => (
             <NavLink key={path} to={path} end={path === "/dashboard"} className={({ isActive }) => `flex min-w-14 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[9px] ${isActive ? "bg-gold text-navy" : "text-white/55"}`}>
               <Icon size={18} /><span>{label}</span>
             </NavLink>

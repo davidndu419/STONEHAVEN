@@ -23,8 +23,11 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (firebaseEnabled) {
       return onAuthStateChanged(auth, async (firebaseUser) => {
-        setUser(firebaseUser ? await dataService.getUser(firebaseUser.uid) : null);
-        setLoading(false);
+        try {
+          setUser(firebaseUser ? await dataService.getUser(firebaseUser.uid) : null);
+        } finally {
+          setLoading(false);
+        }
       });
     }
     const stored = localStorage.getItem(SESSION_KEY);
@@ -32,10 +35,9 @@ export function AuthProvider({ children }) {
       setLoading(false);
       return undefined;
     }
-    dataService.getUser(stored).then((profile) => {
-      setUser(profile);
-      setLoading(false);
-    });
+    dataService.getUser(stored)
+      .then(setUser)
+      .finally(() => setLoading(false));
     return undefined;
   }, []);
 

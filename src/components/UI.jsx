@@ -30,8 +30,9 @@ export function PageHeader({ eyebrow, title, description, action }) {
 }
 
 export function StatusBadge({ status }) {
+  const className = String(status).toLowerCase().replace(/\s+/g, "-");
   return (
-    <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold capitalize status-${status}`}>
+    <span className={`inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold capitalize text-slate-700 status-${className}`}>
       {status}
     </span>
   );
