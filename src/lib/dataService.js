@@ -15,6 +15,8 @@ import { db, firebaseEnabled } from "./firebase";
 import {
   seedCoins, seedDeposits, seedFlashSettings, seedFlashTiers, seedInvestments, seedMethods,
   seedNotifications, seedStocks, seedTransactions, seedUsers, seedWithdrawals,
+  seedAnnouncements, seedCompanyContent, seedFaqs, seedKycSubmissions, seedLegalDocuments,
+  seedPlatformSettings, seedSupportTickets, seedTeamMembers, seedTestimonials,
 } from "../data/demo";
 
 const KEY = "stonehaven-demo-db-v1";
@@ -34,6 +36,15 @@ function initializeLocal() {
     stocks: clone(seedStocks),
     investments: clone(seedInvestments),
     notifications: clone(seedNotifications),
+    platformSettings: clone(seedPlatformSettings),
+    announcements: clone(seedAnnouncements),
+    kycSubmissions: clone(seedKycSubmissions),
+    supportTickets: clone(seedSupportTickets),
+    testimonials: clone(seedTestimonials),
+    companyContent: clone(seedCompanyContent),
+    teamMembers: clone(seedTeamMembers),
+    faqs: clone(seedFaqs),
+    legalDocuments: clone(seedLegalDocuments),
   };
   if (existing) {
     const current = JSON.parse(existing);

@@ -11,6 +11,7 @@ import { EmptyState, PageHeader, StatusBadge } from "../components/UI";
 import { TradingViewChart } from "../components/TradingViewWidget";
 import { InvestmentCard } from "../components/InvestmentUI";
 import { processInvestmentTimers } from "../lib/investmentEngine";
+import { getPlatformSettings } from "../lib/enterprise";
 
 const money = (value = 0) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
 const date = (value) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
@@ -21,7 +22,9 @@ export function UserDashboard() {
   const { activeAssetMode } = useOutletContext();
   const [symbol, setSymbol] = useState(activeAssetMode === "stocks" ? "NASDAQ:AAPL" : "BINANCE:BTCUSDT");
   const [investments, setInvestments] = useState([]);
+  const [announcement, setAnnouncement] = useState(null);
   useEffect(() => { processInvestmentTimers(user.userId).then((items) => setInvestments(items.filter((item) => !["completed", "deleted", "flash done"].includes(item.status)))); }, [user.userId]);
+  useEffect(() => { Promise.all([dataService.list("announcements", user.adminId), dataService.list("announcements", "GLOBAL")]).then((groups) => setAnnouncement(groups.flat().filter((item) => item.status === "published").sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt))[0] || null)); }, [user.adminId]);
   useEffect(() => { setSymbol(activeAssetMode === "stocks" ? "NASDAQ:AAPL" : "BINANCE:BTCUSDT"); }, [activeAssetMode]);
   const visibleInvestments = investments.filter((item) => item.type === (activeAssetMode === "stocks" ? "stock" : "crypto")).slice(0, 2);
   const marketSymbols = activeAssetMode === "stocks"
@@ -36,11 +39,9 @@ export function UserDashboard() {
   ];
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between rounded-2xl border border-gold/30 bg-gradient-to-r from-gold/10 to-white p-5">
-        <div className="flex gap-4"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gold text-navy"><BellRing size={19} /></span><div><p className="font-display text-lg font-bold text-navy">Welcome to your private client portal</p><p className="mt-1 text-xs leading-5 text-slate-500">Phase 1 services are active. Explore your wallet, payments, and referral center.</p></div></div>
-        <button className="hidden text-xs font-bold text-gold sm:block">Dismiss</button>
-      </div>
+      {announcement && <div className="mb-6 flex items-center justify-between rounded-2xl border border-gold/30 bg-gradient-to-r from-gold/10 to-white p-5"><div className="flex gap-4"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gold text-navy"><BellRing size={19} /></span><div><p className="font-display text-lg font-bold text-navy">{announcement.title}</p><p className="mt-1 text-xs leading-5 text-slate-500">{announcement.message}</p></div></div><button onClick={() => setAnnouncement(null)} className="hidden text-xs font-bold text-gold sm:block">Dismiss</button></div>}
       <PageHeader eyebrow="Portfolio overview" title={`Good day, ${user?.name?.split(" ")[0]}.`} description="A consolidated view of your Stonehaven relationship." />
+      <button onClick={() => navigate("/dashboard/kyc")} className={`mb-5 inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold capitalize ${user.kycStatus === "verified" ? "bg-emerald-100 text-emerald-800" : user.kycStatus === "pending" ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"}`}>KYC: {user.kycStatus}</button>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {cards.map(([label, value, Icon, note], index) => <div key={label} className={`glass-card p-5 ${index === 3 ? "bg-navy text-white" : ""}`}><div className="flex items-start justify-between"><div><p className={`text-[10px] font-bold uppercase tracking-[.16em] ${index === 3 ? "text-white/35" : "text-slate-400"}`}>{label}</p><p className={`display-title mt-3 text-3xl ${index === 3 ? "text-white" : "text-navy"}`}>{money(value)}</p></div><span className={`grid h-10 w-10 place-items-center rounded-xl ${index === 3 ? "bg-gold/15 text-gold" : "bg-gold/10 text-gold"}`}><Icon size={19} /></span></div><p className={`mt-5 text-[11px] ${index === 3 ? "text-white/35" : "text-slate-400"}`}>{note}</p></div>)}
       </div>
@@ -95,11 +96,13 @@ export function DepositPage() {
 }
 
 export function WithdrawalPage() {
-  const { user } = useAuth(); const [type, setType] = useState("investment"); const [amount, setAmount] = useState(""); const [method, setMethod] = useState("Bank transfer"); const [details, setDetails] = useState(""); const [done, setDone] = useState(false); const [error, setError] = useState("");
+  const { user } = useAuth(); const navigate = useNavigate(); const [type, setType] = useState("investment"); const [amount, setAmount] = useState(""); const [method, setMethod] = useState("Bank transfer"); const [details, setDetails] = useState(""); const [done, setDone] = useState(false); const [error, setError] = useState(""); const [settings, setSettings] = useState(null);
+  useEffect(() => { getPlatformSettings().then(setSettings); }, []);
   const balance = type === "investment" ? user.availableBalance : user.referralBalance;
   async function submit(event) {
     event.preventDefault(); setError(""); const numeric = Number(amount);
     if (numeric > balance) return setError("The requested amount exceeds your available balance.");
+    if (settings?.kycRequired && settings?.withdrawalLimitEnabled && user.kycStatus !== "verified" && numeric > Number(settings.unverifiedWithdrawalLimit || 500)) return setError(`Complete KYC to withdraw above ${money(settings.unverifiedWithdrawalLimit || 500)}.`);
     await dataService.create("withdrawals", { userId: user.userId, userName: user.name, adminId: user.adminId, type, amount: numeric, method, accountDetails: details, status: "pending" });
     await dataService.log({ userId: user.userId, adminId: user.adminId, type: "withdrawal_requested", label: `${type === "investment" ? "Investment" : "Referral"} withdrawal requested`, amount: numeric, status: "pending" });
     setDone(true);
@@ -107,7 +110,7 @@ export function WithdrawalPage() {
   return (
     <div><PageHeader eyebrow="Distributions" title="Request a withdrawal" description="Investment and referral earnings remain separate throughout review and settlement." />
       <div className="grid gap-6 lg:grid-cols-[.8fr_1.2fr]"><div className="space-y-4">{[["investment", "Available balance", user.availableBalance, ArrowUpFromLine], ["referral", "Referral balance", user.referralBalance, Users]].map(([value, label, balanceValue, Icon]) => <button key={value} onClick={() => { setType(value); setDone(false); }} className={`glass-card w-full p-6 text-left ${type === value ? "border-gold ring-4 ring-gold/10" : ""}`}><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-widest text-slate-400">{label}</p><p className="display-title mt-2 text-3xl text-navy">{money(balanceValue)}</p></div><Icon className="text-gold" /></div></button>)}</div>
-      <div className="glass-card p-6 md:p-8">{done ? <div className="py-12 text-center"><CheckCircle2 className="mx-auto text-forest" size={44} /><h2 className="display-title mt-5 text-3xl text-navy">Request received</h2><p className="mt-3 text-sm text-slate-500">Your funds remain in your balance until the request is approved.</p></div> : <form onSubmit={submit} className="space-y-5">{error && <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</div>}<div className="rounded-xl bg-gold/10 p-4 text-xs leading-5 text-slate-600"><strong>Balance protection:</strong> Stonehaven deducts funds only after an administrator approves your request.</div><div><label className="label">Amount</label><input className="field" type="number" min="1" required value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={`Up to ${money(balance)}`} /></div><div><label className="label">Payment method</label><select className="field" value={method} onChange={(e) => setMethod(e.target.value)}><option>Bank transfer</option><option>USDT (TRC20)</option><option>Bitcoin</option><option>Mobile money</option></select></div><div><label className="label">Account or wallet details</label><textarea className="field min-h-28 resize-none" required value={details} onChange={(e) => setDetails(e.target.value)} /></div><button className="btn-primary w-full">Submit withdrawal request <ArrowUpFromLine size={17} /></button></form>}</div></div>
+      <div className="glass-card p-6 md:p-8">{done ? <div className="py-12 text-center"><CheckCircle2 className="mx-auto text-forest" size={44} /><h2 className="display-title mt-5 text-3xl text-navy">Request received</h2><p className="mt-3 text-sm text-slate-500">Your funds remain in your balance until the request is approved.</p></div> : <form onSubmit={submit} className="space-y-5">{error && <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}<button type="button" onClick={() => navigate("/dashboard/kyc")} className="mt-2 block font-bold underline">Complete KYC now</button></div>}<div className="rounded-xl bg-gold/10 p-4 text-xs leading-5 text-slate-600"><strong>Balance protection:</strong> Stonehaven deducts funds only after an administrator approves your request.{settings?.withdrawalLimitEnabled && user.kycStatus !== "verified" && ` Unverified limit: ${money(settings.unverifiedWithdrawalLimit || 500)}.`}</div><div><label className="label">Amount</label><input className="field" type="number" min="1" required value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={`Up to ${money(balance)}`} /></div><div><label className="label">Payment method</label><select className="field" value={method} onChange={(e) => setMethod(e.target.value)}><option>Bank transfer</option><option>USDT (TRC20)</option><option>Bitcoin</option><option>Mobile money</option></select></div><div><label className="label">Account or wallet details</label><textarea className="field min-h-28 resize-none" required value={details} onChange={(e) => setDetails(e.target.value)} /></div><button className="btn-primary w-full">Submit withdrawal request <ArrowUpFromLine size={17} /></button></form>}</div></div>
     </div>
   );
 }

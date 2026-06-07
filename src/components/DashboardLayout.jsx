@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
-  ArrowDownToLine, ArrowUpFromLine, BarChart3, Bell, Bitcoin, ChevronLeft, ChevronRight, CreditCard,
-  Flame, History, Image, LayoutDashboard, LineChart, Link2, LogOut, Menu, Settings, ShieldCheck, TrendingUp, Users, WalletCards, X,
+  ArrowDownToLine, ArrowUpFromLine, BarChart3, Bell, Bitcoin, Building2, ChevronLeft, ChevronRight, CreditCard,
+  FileText, Flame, History, Image, LayoutDashboard, LifeBuoy, LineChart, Link2, LogOut, Megaphone, Menu,
+  Settings, ShieldCheck, Sparkles, TrendingUp, Users, WalletCards, X,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { Brand } from "./UI";
+import { dataService } from "../lib/dataService";
 
 const userNav = [
   ["/dashboard", "Dashboard", LayoutDashboard],
@@ -18,6 +20,9 @@ const userNav = [
   ["/dashboard/withdraw", "Withdraw", ArrowUpFromLine],
   ["/dashboard/referrals", "Referrals", Users],
   ["/dashboard/transactions", "Transactions", History],
+  ["/dashboard/notifications", "Notifications", Bell],
+  ["/dashboard/kyc", "KYC Verification", ShieldCheck],
+  ["/dashboard/support", "Support", LifeBuoy],
   ["/dashboard/settings", "Settings", Settings],
 ];
 
@@ -32,6 +37,10 @@ const adminNav = [
   ["withdrawals", "Withdrawals", ArrowUpFromLine],
   ["methods", "Deposit methods", CreditCard],
   ["referrals", "Referrals", WalletCards],
+  ["kyc", "KYC review", ShieldCheck],
+  ["support", "Support tickets", LifeBuoy],
+  ["announcements", "Announcements", Megaphone],
+  ["analytics", "Analytics", BarChart3],
 ];
 
 export default function DashboardLayout({ admin = false, superAdmin = false }) {
@@ -40,16 +49,27 @@ export default function DashboardLayout({ admin = false, superAdmin = false }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
   const [activeAssetMode, setActiveAssetMode] = useState(() => localStorage.getItem("stonehaven-asset-mode") || user?.preference || "crypto");
   const base = superAdmin ? "/superadmin" : "/admin";
   const adminItems = superAdmin
-    ? [...adminNav, ["onboarding-links", "Onboarding links", Link2], ["branding", "Platform branding", Image]]
+    ? [...adminNav, ["onboarding-links", "Onboarding links", Link2], ["testimonials", "Testimonials", Sparkles], ["company", "Company info", Building2], ["content", "Content management", FileText], ["branding", "Platform branding", Image], ["platform-settings", "Platform settings", Settings]]
     : adminNav;
   const navigation = admin ? adminItems.map(([path, label, Icon]) => [`${base}/${path}`, label, Icon]) : userNav;
 
   useEffect(() => {
     localStorage.setItem("stonehaven-asset-mode", activeAssetMode);
   }, [activeAssetMode]);
+
+  useEffect(() => {
+    if (admin) return;
+    const loadNotifications = () => dataService.listForUser("notifications", user.userId).then((items) => setNotifications(items.filter((item) => !item.dismissed).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))));
+    loadNotifications();
+    const timer = setInterval(loadNotifications, 10000);
+    return () => clearInterval(timer);
+  }, [admin, user.userId]);
+  const unread = notifications.filter((item) => !item.read).length;
 
   async function signOutUser() {
     await logout();
@@ -102,7 +122,10 @@ export default function DashboardLayout({ admin = false, superAdmin = false }) {
             {admin && <span className="text-xs font-bold uppercase tracking-[.18em] text-slate-400">{superAdmin ? "Super Admin Portal" : "Advisor Portal"}</span>}
           </div>
           <div className="flex items-center gap-2">
-            <button className="relative rounded-xl border border-slate-200 bg-white p-2.5 text-slate-600"><Bell size={19} /><span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-burgundy ring-2 ring-white" /></button>
+            <div className="relative">
+              <button onClick={() => setNotificationOpen(!notificationOpen)} className="relative rounded-xl border border-slate-200 bg-white p-2.5 text-slate-600"><Bell size={19} />{unread > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-burgundy px-1 text-[9px] font-bold text-white">{unread}</span>}</button>
+              {notificationOpen && !admin && <div className="absolute right-0 mt-2 w-[min(360px,90vw)] rounded-2xl border border-slate-200 bg-white p-3 shadow-heritage"><div className="flex items-center justify-between px-2 py-2"><p className="font-display text-lg font-bold text-navy">Notifications</p><button onClick={() => navigate("/dashboard/notifications")} className="text-xs font-bold text-gold">View all</button></div><div className="max-h-80 overflow-y-auto">{notifications.slice(0, 5).map((item) => <button key={item.id} onClick={async () => { await dataService.update("notifications", item.id, { read: true }); setNotifications(notifications.map((entry) => entry.id === item.id ? { ...entry, read: true } : entry)); }} className="w-full rounded-xl p-3 text-left hover:bg-stone"><div className="flex gap-3"><span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${item.read ? "bg-slate-200" : "bg-gold"}`} /><div><p className="text-sm font-bold text-navy">{item.title}</p><p className="mt-1 line-clamp-2 text-xs text-slate-500">{item.message}</p></div></div></button>)}{!notifications.length && <p className="p-6 text-center text-sm text-slate-400">No notifications</p>}</div></div>}
+            </div>
             <div className="relative">
               <button onClick={() => setProfileOpen(!profileOpen)} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-1.5 pr-3">
                 <span className="grid h-8 w-8 place-items-center rounded-lg bg-navy font-display font-bold text-gold">{user?.name?.charAt(0)}</span>

@@ -1,4 +1,5 @@
 import { dataService } from "./dataService";
+import { getPlatformSettings } from "./enterprise";
 
 const DAY = 24 * 60 * 60 * 1000;
 export const referralBonusFor = (capital) => ({ 200: 20, 300: 30, 400: 40, 500: 50, 600: 60, 700: 70, 800: 80, 1000: 100 }[capital] || 0);
@@ -50,7 +51,8 @@ async function payReferralBonus(investment) {
   if (!investor?.referredBy) return false;
   const scopedUsers = await dataService.listUsers(investment.adminId);
   const referrer = scopedUsers.find((item) => item.referralCode === investor.referredBy);
-  const amount = referralBonusFor(investment.weeklyCapital);
+  const settings = await getPlatformSettings();
+  const amount = Number(settings.referralBonuses?.[investment.weeklyCapital] ?? referralBonusFor(investment.weeklyCapital));
   if (!referrer || !amount) return false;
   await dataService.updateUser(referrer.userId, { referralBalance: Number(referrer.referralBalance || 0) + amount });
   await dataService.log({ userId: referrer.userId, adminId: referrer.adminId, type: "referral_bonus_earned", label: `Referral bonus from ${investor.name}`, amount, status: "completed" });

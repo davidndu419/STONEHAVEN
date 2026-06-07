@@ -6,6 +6,8 @@ import {
 } from "lucide-react";
 import { Brand } from "../components/UI";
 import { TradingViewTicker } from "../components/TradingViewWidget";
+import { LiveActivityFeed, TestimonialToast } from "../components/LandingEnterprise";
+import { dataService } from "../lib/dataService";
 
 const plans = [
   [200, 87000, 88000], [300, 87000, 108000], [400, 107000, 128000], [500, 127000, 148000],
@@ -18,7 +20,7 @@ const testimonials = [
   ["Nora A.", "United Arab Emirates", "A refined platform with attentive service and a genuinely global outlook."],
 ];
 
-const faqs = [
+const defaultFaqs = [
   ["What investment products are available?", "Stonehaven provides flash, cryptocurrency, and stock investment products, each presented with its own terms and portfolio reporting."],
   ["How are deposits reviewed?", "Deposits are submitted with a transaction reference and payment proof, then reviewed by your assigned account administrator."],
   ["Can I use the platform internationally?", "Yes. Stonehaven is designed for a global membership, subject to local eligibility and compliance requirements."],
@@ -52,11 +54,13 @@ export default function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [testimonial, setTestimonial] = useState(0);
   const [faq, setFaq] = useState(0);
+  const [faqItems, setFaqItems] = useState(defaultFaqs.map(([question, answer], index) => ({ id: `default-${index}`, question, answer, order: index, visible: true })));
 
   useEffect(() => {
     const timer = setInterval(() => setTestimonial((value) => (value + 1) % testimonials.length), 5000);
     return () => clearInterval(timer);
   }, []);
+  useEffect(() => { dataService.list("faqs", "GLOBAL", true).then((items) => { const visible = items.filter((item) => item.visible).sort((a, b) => a.order - b.order); if (visible.length) setFaqItems(visible); }); }, []);
 
   return (
     <div className="overflow-hidden bg-stone">
@@ -183,10 +187,12 @@ export default function LandingPage() {
         </div>
       </section>
 
+      <LiveActivityFeed />
+
       <section id="faq" className="bg-white px-5 py-28">
         <div className="mx-auto grid max-w-6xl gap-12 lg:grid-cols-[.8fr_1.2fr]">
           <SectionTitle kicker="Frequently asked" title="The essentials, made clear." text="Our client service team remains available for questions specific to your account." />
-          <div>{faqs.map(([question, answer], index) => <div key={question} className="border-b border-slate-200"><button onClick={() => setFaq(faq === index ? -1 : index)} className="flex w-full items-center justify-between py-5 text-left font-display text-xl font-bold text-navy">{question}<ChevronDown className={`shrink-0 text-gold transition ${faq === index ? "rotate-180" : ""}`} /></button>{faq === index && <p className="pb-6 pr-10 text-sm leading-7 text-slate-500">{answer}</p>}</div>)}</div>
+          <div>{faqItems.map((item, index) => <div key={item.id || item.question} className="border-b border-slate-200"><button onClick={() => setFaq(faq === index ? -1 : index)} className="flex w-full items-center justify-between py-5 text-left font-display text-xl font-bold text-navy">{item.question}<ChevronDown className={`shrink-0 text-gold transition ${faq === index ? "rotate-180" : ""}`} /></button>{faq === index && <p className="pb-6 pr-10 text-sm leading-7 text-slate-500">{item.answer}</p>}</div>)}</div>
         </div>
       </section>
 
@@ -198,8 +204,9 @@ export default function LandingPage() {
       </section>
 
       <footer className="bg-[#090f1c] px-5 py-14 text-white/50">
-        <div className="mx-auto max-w-7xl"><div className="grid gap-10 border-b border-white/10 pb-10 md:grid-cols-2"><div><Brand light /><p className="mt-5 max-w-sm text-sm leading-6">Building wealth for generations through considered strategy and modern technology.</p></div><div className="flex gap-10 md:justify-end"><a href="#plans">Plans</a><a href="#faq">FAQ</a><Link to="/terms">Terms</Link><Link to="/privacy">Privacy</Link></div></div><div className="mt-8 flex flex-col justify-between gap-5 text-[11px] leading-5 md:flex-row"><p>© 2026 Stonehaven Investment Group. All rights reserved.</p><p className="max-w-3xl md:text-right">Risk disclosure: All investment activity involves risk, including possible loss of capital. Projected values are illustrative and do not constitute a guarantee or financial advice.</p></div></div>
+        <div className="mx-auto max-w-7xl"><div className="grid gap-10 border-b border-white/10 pb-10 md:grid-cols-2"><div><Brand light /><p className="mt-5 max-w-sm text-sm leading-6">Building wealth for generations through considered strategy and modern technology.</p></div><div className="flex flex-wrap gap-10 md:justify-end"><a href="#plans">Plans</a><a href="#faq">FAQ</a><Link to="/company">Company</Link><Link to="/terms">Terms</Link><Link to="/privacy">Privacy</Link></div></div><div className="mt-8 flex flex-col justify-between gap-5 text-[11px] leading-5 md:flex-row"><p>© 2026 Stonehaven Investment Group. All rights reserved.</p><p className="max-w-3xl md:text-right">Risk disclosure: All investment activity involves risk, including possible loss of capital. Projected values are illustrative and do not constitute a guarantee or financial advice.</p></div></div>
       </footer>
+      <TestimonialToast />
     </div>
   );
 }

@@ -5,6 +5,7 @@ service cloud.firestore {
     function profile() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
     function isSuperAdmin() { return signedIn() && profile().role == "superadmin"; }
     function isSubAdmin() { return signedIn() && profile().role == "sub-admin"; }
+    function isActiveUser() { return signedIn() && profile().status == "active"; }
     function ownsAdminScope(adminId) {
       return isSuperAdmin() || (isSubAdmin() && profile().adminId == adminId);
     }
@@ -31,8 +32,93 @@ service cloud.firestore {
       allow delete: if isSuperAdmin();
     }
 
+    match /notifications/{documentId} {
+      allow read: if isActiveUser() && (resource.data.userId == request.auth.uid || ownsAdminScope(resource.data.adminId));
+      allow create: if isActiveUser() && (request.resource.data.userId == request.auth.uid || ownsAdminScope(request.resource.data.adminId));
+      allow update: if isActiveUser() && (
+        ownsAdminScope(resource.data.adminId)
+        || (resource.data.userId == request.auth.uid
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.adminId == resource.data.adminId
+          && request.resource.data.title == resource.data.title
+          && request.resource.data.message == resource.data.message)
+      );
+      allow delete: if isSuperAdmin() || ownsAdminScope(resource.data.adminId);
+    }
+
+    match /supportTickets/{documentId} {
+      allow read: if isActiveUser() && (resource.data.userId == request.auth.uid || ownsAdminScope(resource.data.adminId));
+      allow create: if isActiveUser() && request.resource.data.userId == request.auth.uid
+        && request.resource.data.adminId == profile().adminId;
+      allow update: if isActiveUser() && (
+        ownsAdminScope(resource.data.adminId)
+        || (resource.data.userId == request.auth.uid
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.adminId == resource.data.adminId
+          && request.resource.data.ticketId == resource.data.ticketId
+          && request.resource.data.status == resource.data.status
+          && request.resource.data.subject == resource.data.subject)
+      );
+      allow delete: if ownsAdminScope(resource.data.adminId);
+    }
+
+    match /announcements/{documentId} {
+      allow read: if isActiveUser() && (
+        ownsAdminScope(resource.data.adminId)
+        || (resource.data.status == "published"
+          && (resource.data.adminId == profile().adminId || resource.data.adminId == "GLOBAL"))
+      );
+      allow create: if isActiveUser() && ownsAdminScope(request.resource.data.adminId);
+      allow update, delete: if isActiveUser() && ownsAdminScope(resource.data.adminId);
+    }
+
+    match /kycSubmissions/{documentId} {
+      allow read: if isActiveUser() && (resource.data.userId == request.auth.uid || ownsAdminScope(resource.data.adminId));
+      allow create: if isActiveUser() && request.resource.data.userId == request.auth.uid
+        && request.resource.data.adminId == profile().adminId;
+      allow update: if isActiveUser() && (
+        ownsAdminScope(resource.data.adminId)
+        || (resource.data.userId == request.auth.uid
+          && resource.data.status == "rejected"
+          && request.resource.data.status == "pending"
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.adminId == resource.data.adminId)
+      );
+      allow delete: if isSuperAdmin();
+    }
+
+    match /testimonials/{documentId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    match /companyContent/{documentId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    match /teamMembers/{documentId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    match /faqs/{documentId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    match /legalDocuments/{documentId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    match /platformSettings/{documentId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
     match /{collection}/{documentId} {
-      allow read: if signedIn() && (
+      allow read: if isActiveUser() && (
         isSuperAdmin()
         || resource.data.userId == request.auth.uid
         || ownsAdminScope(resource.data.adminId)
@@ -40,11 +126,11 @@ service cloud.firestore {
           && resource.data.adminId == profile().adminId
           && resource.data.active == true)
       );
-      allow create: if signedIn() && (
+      allow create: if isActiveUser() && (
         request.resource.data.userId == request.auth.uid
         || ownsAdminScope(request.resource.data.adminId)
       );
-      allow update, delete: if signedIn() && ownsAdminScope(resource.data.adminId);
+      allow update, delete: if isActiveUser() && ownsAdminScope(resource.data.adminId);
     }
   }
 }

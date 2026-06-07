@@ -229,3 +229,82 @@ export const seedInvestments = [{
 }];
 
 export const seedNotifications = [];
+
+export const seedPlatformSettings = [{
+  id: "platform-global",
+  adminId: "GLOBAL",
+  key: "platform",
+  platformName: "Stonehaven Investment Group",
+  logoUrl: "",
+  maintenanceMode: false,
+  kycRequired: true,
+  withdrawalLimitEnabled: true,
+  unverifiedWithdrawalLimit: 500,
+  referralEnabled: true,
+  referralBonuses: { 200: 20, 300: 30, 400: 40, 500: 50, 600: 60, 700: 70, 800: 80, 1000: 100 },
+  testimonialEnabled: true,
+  testimonialMinInterval: 8,
+  testimonialMaxInterval: 15,
+}];
+
+export const seedAnnouncements = [{
+  id: "announcement-welcome",
+  adminId: ADMIN_ID,
+  title: "Welcome to the Stonehaven client portal",
+  message: "Your portfolio, funding activity, and private client services are now available in one secure experience.",
+  type: "info",
+  audience: "admin-users",
+  status: "published",
+  scheduledAt: "",
+  publishedAt: "2026-06-01T09:00:00.000Z",
+  createdAt: "2026-06-01T09:00:00.000Z",
+}];
+
+export const seedKycSubmissions = [];
+export const seedSupportTickets = [];
+
+const toastNames = ["Amelia", "Daniel", "Nora", "James", "Sarah", "Ahmed", "Olivia", "Marcus", "Elena", "David"];
+const toastCountries = ["United Kingdom", "Canada", "UAE", "United States", "Germany", "Nigeria", "Singapore", "France"];
+const toastActions = [
+  ["withdrew", 148000], ["activated a BTC plan", 600], ["completed an AAPL plan", 168000],
+  ["funded Week 1", 500], ["earned a referral bonus", 80],
+];
+export const seedTestimonials = Array.from({ length: 200 }, (_, index) => {
+  const action = toastActions[index % toastActions.length];
+  return {
+    id: `testimonial-${index + 1}`,
+    adminId: "GLOBAL",
+    name: `${toastNames[index % toastNames.length]} ${String.fromCharCode(65 + (index % 26))}.`,
+    country: toastCountries[index % toastCountries.length],
+    message: action[0].includes("plan") ? `${action[0]} with ${action[1].toLocaleString()} USD projected` : `${action[0]} ${action[1].toLocaleString()} USD`,
+    active: true,
+    category: index % 3 === 0 ? "withdrawal" : index % 3 === 1 ? "activation" : "deposit",
+  };
+});
+
+export const seedCompanyContent = [{
+  id: "company-overview",
+  adminId: "GLOBAL",
+  key: "overview",
+  title: "Stewardship for the modern generation",
+  overview: "Stonehaven Investment Group combines the discretion of a traditional family office with modern portfolio technology.",
+  values: ["Stewardship", "Clarity", "Discipline", "Long-term alignment"],
+  offices: ["New York", "London", "Lagos", "Singapore"],
+  stats: [{ label: "Global investors", value: "48,000+" }, { label: "Countries", value: "120+" }, { label: "Client satisfaction", value: "98.7%" }],
+}];
+
+export const seedTeamMembers = [
+  { id: "team-eleanor", adminId: "GLOBAL", name: "Eleanor Stone", position: "Group Chair", location: "New York", previousCompanies: "Morgan Stanley, BlackRock", education: "Harvard Business School", quote: "Wealth is best measured across generations.", linkedin: "", photoUrl: "", displayOrder: 1, visible: true },
+  { id: "team-james", adminId: "GLOBAL", name: "James Whitmore", position: "Chief Investment Officer", location: "London", previousCompanies: "J.P. Morgan Private Bank", education: "London Business School", quote: "Discipline turns opportunity into enduring value.", linkedin: "", photoUrl: "", displayOrder: 2, visible: true },
+];
+
+export const seedFaqs = [
+  { id: "faq-products", adminId: "GLOBAL", category: "General", question: "What investment products are available?", answer: "Stonehaven provides flash, cryptocurrency, and stock investment products.", order: 1, visible: true },
+  { id: "faq-deposits", adminId: "GLOBAL", category: "Deposits", question: "How are deposits reviewed?", answer: "Each deposit is reviewed with its transaction reference and payment proof.", order: 2, visible: true },
+  { id: "faq-withdrawals", adminId: "GLOBAL", category: "Withdrawals", question: "When is KYC required?", answer: "KYC is required when an unverified withdrawal exceeds the configured platform limit.", order: 3, visible: true },
+];
+
+export const seedLegalDocuments = [
+  { id: "legal-terms-v1", adminId: "GLOBAL", type: "terms", title: "Terms & Conditions", content: "Stonehaven platform terms placeholder. Replace with counsel-approved production terms.", version: 1, published: true, createdAt: "2026-06-01T09:00:00.000Z" },
+  { id: "legal-privacy-v1", adminId: "GLOBAL", type: "privacy", title: "Privacy Policy", content: "Stonehaven privacy policy placeholder. Replace with counsel-approved production policy.", version: 1, published: true, createdAt: "2026-06-01T09:00:00.000Z" },
+];
