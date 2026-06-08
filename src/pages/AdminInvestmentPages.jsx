@@ -56,6 +56,21 @@ function AssetLibraryPage({ kind }) {
 export const CoinLibraryPage = () => <AssetLibraryPage kind="crypto" />;
 export const StockLibraryPage = () => <AssetLibraryPage kind="stock" />;
 
+export function InvestmentLibraryPage() {
+  const [active, setActive] = useState("flash");
+  return <div>
+    <PageHeader eyebrow="Investment configuration" title="Investment Library" description="Manage flash settings, crypto assets, and stock assets from one place." />
+    <div className="mb-6 grid gap-2 rounded-2xl bg-white p-2 shadow-sm sm:inline-grid sm:min-w-[520px] sm:grid-cols-3">
+      <button onClick={() => setActive("flash")} className={`rounded-xl px-4 py-3 text-sm font-bold ${active === "flash" ? "bg-navy text-white" : "text-slate-500"}`}>Flash settings</button>
+      <button onClick={() => setActive("coins")} className={`rounded-xl px-4 py-3 text-sm font-bold ${active === "coins" ? "bg-navy text-white" : "text-slate-500"}`}>Coin library</button>
+      <button onClick={() => setActive("stocks")} className={`rounded-xl px-4 py-3 text-sm font-bold ${active === "stocks" ? "bg-navy text-white" : "text-slate-500"}`}>Stock library</button>
+    </div>
+    {active === "flash" && <FlashAdminPage />}
+    {active === "coins" && <CoinLibraryPage />}
+    {active === "stocks" && <StockLibraryPage />}
+  </div>;
+}
+
 export function AdminInvestmentsPage() {
   const { items, load } = useScoped("investments"); const [detail, setDetail] = useState(null);
   async function updateStatus(investment, status, reason = "") {

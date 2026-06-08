@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
-  ArrowDownToLine, ArrowUpFromLine, BarChart3, Bell, Bitcoin, Building2, ChevronLeft, ChevronRight, CreditCard,
+  ArrowDownToLine, ArrowUpFromLine, BarChart3, Bell, Building2, ChevronLeft, ChevronRight, CreditCard,
   FileText, Flame, History, Image, LayoutDashboard, LifeBuoy, LineChart, Link2, LogOut, Megaphone, Menu,
   Settings, ShieldCheck, Sparkles, TrendingUp, Users, WalletCards, X,
 } from "lucide-react";
@@ -29,9 +29,7 @@ const adminNav = [
   ["dashboard", "Overview", LayoutDashboard],
   ["users", "Users", Users],
   ["investments", "Investments", TrendingUp],
-  ["flash", "Flash settings", Flame],
-  ["coins", "Coin library", Bitcoin],
-  ["stocks", "Stock library", LineChart],
+  ["investment-library", "Investment Library", LineChart],
   ["approvals", "Approvals", ShieldCheck],
   ["methods", "Deposit methods", CreditCard],
   ["referrals", "Referrals", WalletCards],

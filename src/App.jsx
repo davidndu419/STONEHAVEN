@@ -5,7 +5,7 @@ import { ForgotPasswordPage, LoginPage, OnboardingPage, RegisterPage } from "./p
 import { DepositPage, ReferralWithdrawalPage, ReferralsPage, SettingsPage, TransactionsPage, WithdrawalPage } from "./pages/UserPages";
 import { FundInvestmentPage } from "./pages/FundingPages";
 import { CryptoInvestmentPage, EarningsPage, FlashInvestmentPage, InvestmentsPage, PortfolioPage, StockInvestmentPage, StockResearchPage } from "./pages/InvestmentPages";
-import { AdminInvestmentsPage, CoinLibraryPage, FlashAdminPage, StockLibraryPage } from "./pages/AdminInvestmentPages";
+import { AdminInvestmentsPage, InvestmentLibraryPage } from "./pages/AdminInvestmentPages";
 import { CompanyPage, KycPage, NotificationsPage, SupportPage } from "./pages/EnterpriseUserPages";
 import {
   AnalyticsPage, AnnouncementsAdminPage, CompanyAdminPage, ContentAdminPage,
@@ -83,9 +83,10 @@ export default function App() {
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/admin/users" element={<UsersAdminPage />} />
           <Route path="/admin/investments" element={<AdminInvestmentsPage />} />
-          <Route path="/admin/flash" element={<FlashAdminPage />} />
-          <Route path="/admin/coins" element={<CoinLibraryPage />} />
-          <Route path="/admin/stocks" element={<StockLibraryPage />} />
+          <Route path="/admin/investment-library" element={<InvestmentLibraryPage />} />
+          <Route path="/admin/flash" element={<Navigate to="/admin/investment-library" replace />} />
+          <Route path="/admin/coins" element={<Navigate to="/admin/investment-library" replace />} />
+          <Route path="/admin/stocks" element={<Navigate to="/admin/investment-library" replace />} />
           <Route path="/admin/approvals" element={<ApprovalsAdminPage />} />
           <Route path="/admin/deposits" element={<Navigate to="/admin/approvals" replace />} />
           <Route path="/admin/withdrawals" element={<Navigate to="/admin/approvals" replace />} />
@@ -104,9 +105,10 @@ export default function App() {
           <Route path="/superadmin/users" element={<UsersAdminPage superAdmin />} />
           <Route path="/superadmin/users/:userId" element={<UserControlCenter />} />
           <Route path="/superadmin/investments" element={<AdminInvestmentsPage />} />
-          <Route path="/superadmin/flash" element={<FlashAdminPage />} />
-          <Route path="/superadmin/coins" element={<CoinLibraryPage />} />
-          <Route path="/superadmin/stocks" element={<StockLibraryPage />} />
+          <Route path="/superadmin/investment-library" element={<InvestmentLibraryPage />} />
+          <Route path="/superadmin/flash" element={<Navigate to="/superadmin/investment-library" replace />} />
+          <Route path="/superadmin/coins" element={<Navigate to="/superadmin/investment-library" replace />} />
+          <Route path="/superadmin/stocks" element={<Navigate to="/superadmin/investment-library" replace />} />
           <Route path="/superadmin/approvals" element={<ApprovalsAdminPage />} />
           <Route path="/superadmin/deposits" element={<Navigate to="/superadmin/approvals" replace />} />
           <Route path="/superadmin/withdrawals" element={<Navigate to="/superadmin/approvals" replace />} />
