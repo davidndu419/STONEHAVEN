@@ -72,7 +72,7 @@ export function SupportPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ subject: "", category: "Account", message: "" });
   const [reply, setReply] = useState("");
-  const load = useCallback(() => dataService.listForUser("supportTickets", user.userId).then((items) => { const sorted = items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); setTickets(sorted); setSelected((current) => current ? sorted.find((item) => item.id === current.id) || null : null); }), [user.userId]);
+  const load = useCallback(() => dataService.listForUser("supportTickets", user.userId).then((items) => { const sorted = items.filter((item) => !item.deletedForUser).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); setTickets(sorted); setSelected((current) => current ? sorted.find((item) => item.id === current.id) || null : null); }), [user.userId]);
   useEffect(() => {
     load();
     const timer = window.setInterval(load, 5000);

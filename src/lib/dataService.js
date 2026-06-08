@@ -42,6 +42,8 @@ function initializeLocal() {
     announcements: clone(seedAnnouncements),
     kycSubmissions: clone(seedKycSubmissions),
     supportTickets: clone(seedSupportTickets),
+    adminNotes: [],
+    adminAuditRecords: [],
     testimonials: clone(seedTestimonials),
     companyContent: clone(seedCompanyContent),
     teamMembers: clone(seedTeamMembers),

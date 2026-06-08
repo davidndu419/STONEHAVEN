@@ -3,6 +3,7 @@ import { ArrowRight, Clock3, DollarSign, TrendingUp } from "lucide-react";
 import { calculatePlan } from "../lib/investmentEngine";
 import { calculateLiveLockedBalance, formatInvestmentTime } from "../lib/lockedBalance";
 import { StatusBadge } from "./UI";
+import { useCurrency } from "../lib/currency";
 
 export const money = (value = 0) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
 
@@ -23,6 +24,7 @@ export function Countdown({ target, prefix = "" }) {
 }
 
 export function PlanCalculator({ tiers, selectedTier, onTierChange, duration, onDurationChange, compact = false }) {
+  const { format: money } = useCurrency();
   const tier = selectedTier || tiers?.[0];
   const values = useMemo(() => tier ? calculatePlan(tier, duration) : null, [tier, duration]);
   if (!tier || !values) return null;
@@ -40,6 +42,7 @@ export function PlanCalculator({ tiers, selectedTier, onTierChange, duration, on
 }
 
 export function FlashCalculator({ tiers, durationHours, selectedTier, onTierChange }) {
+  const { format: money } = useCurrency();
   const tier = selectedTier || tiers?.[0];
   if (!tier) return null;
   const profit = Number(tier.returnAmount) - Number(tier.capital);
@@ -47,6 +50,7 @@ export function FlashCalculator({ tiers, durationHours, selectedTier, onTierChan
 }
 
 export function InvestmentCard({ investment, onDeposit, onDetails }) {
+  const { format: money } = useCurrency();
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -70,6 +74,7 @@ export function InvestmentCard({ investment, onDeposit, onDetails }) {
 }
 
 export function InvestmentDetail({ investment }) {
+  const { format: money } = useCurrency();
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -125,6 +130,7 @@ export function InvestmentDetail({ investment }) {
 }
 
 export function Timeline({ investment }) {
+  const { format: money } = useCurrency();
   const nodes = Array.from({ length: investment.totalWeeks || 1 }, (_, index) => {
     const week = index + 1;
     return investment.timeline?.find((item) => item.week === week) || { week, status: week <= (investment.completedWeeks || 0) ? "approved" : "upcoming" };
@@ -133,6 +139,7 @@ export function Timeline({ investment }) {
 }
 
 export function MiniBarChart({ values }) {
+  const { format: money } = useCurrency();
   const max = Math.max(...values.map((item) => item.value), 1);
   return <div className="flex h-56 items-end gap-3">{values.map((item) => <div key={item.label} className="flex h-full flex-1 flex-col justify-end"><div title={money(item.value)} className="rounded-t-lg bg-gold transition hover:bg-[#d8b86e]" style={{ height: `${Math.max(4, (item.value / max) * 100)}%` }} /><p className="mt-3 text-center text-[9px] uppercase text-slate-400">{item.label}</p></div>)}</div>;
 }

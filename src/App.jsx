@@ -8,13 +8,15 @@ import { CryptoInvestmentPage, EarningsPage, FlashInvestmentPage, InvestmentsPag
 import { AdminInvestmentsPage, CoinLibraryPage, FlashAdminPage, StockLibraryPage } from "./pages/AdminInvestmentPages";
 import { CompanyPage, KycPage, NotificationsPage, SupportPage } from "./pages/EnterpriseUserPages";
 import {
-  AdminSupportPage, AnalyticsPage, AnnouncementsAdminPage, CompanyAdminPage, ContentAdminPage,
+  AnalyticsPage, AnnouncementsAdminPage, CompanyAdminPage, ContentAdminPage,
   KycReviewPage, PlatformSettingsPage, TestimonialsAdminPage,
 } from "./pages/EnterpriseAdminPages";
 import {
-  AdminDashboard, AdminReferralsPage, DepositMethodsPage, DepositsAdminPage,
-  OnboardingLinksPage, PlatformBrandingPage, UsersAdminPage, WithdrawalsAdminPage,
+  AdminDashboard, AdminReferralsPage, ApprovalsAdminPage, DepositMethodsPage,
+  OnboardingLinksPage, PlatformBrandingPage, UsersAdminPage,
 } from "./pages/AdminPages";
+import { UserControlCenter } from "./pages/AdminUserDetail";
+import { AdminSupportInbox } from "./pages/AdminSupportInbox";
 import ProtectedRoute from "./components/ProtectedRoute";
 import DashboardLayout from "./components/DashboardLayout";
 import DashboardHome from "./components/DashboardHome";
@@ -84,12 +86,13 @@ export default function App() {
           <Route path="/admin/flash" element={<FlashAdminPage />} />
           <Route path="/admin/coins" element={<CoinLibraryPage />} />
           <Route path="/admin/stocks" element={<StockLibraryPage />} />
-          <Route path="/admin/deposits" element={<DepositsAdminPage />} />
-          <Route path="/admin/withdrawals" element={<WithdrawalsAdminPage />} />
+          <Route path="/admin/approvals" element={<ApprovalsAdminPage />} />
+          <Route path="/admin/deposits" element={<Navigate to="/admin/approvals" replace />} />
+          <Route path="/admin/withdrawals" element={<Navigate to="/admin/approvals" replace />} />
           <Route path="/admin/methods" element={<DepositMethodsPage />} />
           <Route path="/admin/referrals" element={<AdminReferralsPage />} />
           <Route path="/admin/kyc" element={<KycReviewPage />} />
-          <Route path="/admin/support" element={<AdminSupportPage />} />
+          <Route path="/admin/support" element={<AdminSupportInbox />} />
           <Route path="/admin/announcements" element={<AnnouncementsAdminPage />} />
           <Route path="/admin/analytics" element={<AnalyticsPage />} />
         </Route>
@@ -99,18 +102,20 @@ export default function App() {
         <Route element={<DashboardLayout admin superAdmin />}>
           <Route path="/superadmin/dashboard" element={<AdminDashboard superAdmin />} />
           <Route path="/superadmin/users" element={<UsersAdminPage superAdmin />} />
+          <Route path="/superadmin/users/:userId" element={<UserControlCenter />} />
           <Route path="/superadmin/investments" element={<AdminInvestmentsPage />} />
           <Route path="/superadmin/flash" element={<FlashAdminPage />} />
           <Route path="/superadmin/coins" element={<CoinLibraryPage />} />
           <Route path="/superadmin/stocks" element={<StockLibraryPage />} />
-          <Route path="/superadmin/deposits" element={<DepositsAdminPage />} />
-          <Route path="/superadmin/withdrawals" element={<WithdrawalsAdminPage />} />
+          <Route path="/superadmin/approvals" element={<ApprovalsAdminPage />} />
+          <Route path="/superadmin/deposits" element={<Navigate to="/superadmin/approvals" replace />} />
+          <Route path="/superadmin/withdrawals" element={<Navigate to="/superadmin/approvals" replace />} />
           <Route path="/superadmin/methods" element={<DepositMethodsPage />} />
           <Route path="/superadmin/referrals" element={<AdminReferralsPage />} />
           <Route path="/superadmin/onboarding-links" element={<OnboardingLinksPage />} />
           <Route path="/superadmin/branding" element={<PlatformBrandingPage />} />
           <Route path="/superadmin/kyc" element={<KycReviewPage />} />
-          <Route path="/superadmin/support" element={<AdminSupportPage />} />
+          <Route path="/superadmin/support" element={<AdminSupportInbox />} />
           <Route path="/superadmin/announcements" element={<AnnouncementsAdminPage />} />
           <Route path="/superadmin/analytics" element={<AnalyticsPage superAdmin />} />
           <Route path="/superadmin/testimonials" element={<TestimonialsAdminPage />} />

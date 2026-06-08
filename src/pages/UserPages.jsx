@@ -16,13 +16,13 @@ import { requestWithdrawalIntent, submitDepositIntent } from "../lib/securityApi
 import { INVESTMENT_MODES, investmentModeLabel } from "../lib/investmentMode";
 import { loadTransactionHistory } from "../lib/transactionHistory";
 import { calculateTotalLockedBalance, calculateTotalPortfolio } from "../lib/lockedBalance";
-
-const money = (value = 0) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
+import { useCurrency, CURRENCIES } from "../lib/currency";
 const date = (value) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
 
 export function UserDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { format: money } = useCurrency();
   const { activeAssetMode } = useOutletContext();
   const [symbol, setSymbol] = useState(activeAssetMode === "stocks" ? "NASDAQ:AAPL" : "BINANCE:BTCUSDT");
   const [investments, setInvestments] = useState([]);
@@ -324,11 +324,12 @@ export function DepositPage() {
 }
 
 export function WithdrawalPage() {
-  const { user } = useAuth(); const navigate = useNavigate(); const [amount, setAmount] = useState(""); const [method, setMethod] = useState("Bank transfer"); const [details, setDetails] = useState(""); const [done, setDone] = useState(false); const [error, setError] = useState(""); const [settings, setSettings] = useState(null);
+  const { user } = useAuth(); const navigate = useNavigate(); const { format: money } = useCurrency(); const [amount, setAmount] = useState(""); const [method, setMethod] = useState("Bank transfer"); const [details, setDetails] = useState(""); const [done, setDone] = useState(false); const [error, setError] = useState(""); const [settings, setSettings] = useState(null);
   useEffect(() => { getPlatformSettings().then(setSettings); }, []);
   const balance = user.availableBalance;
   async function submit(event) {
     event.preventDefault(); setError(""); const numeric = Number(amount);
+    if (user.freezeWithdrawal) return setError(user.withdrawalFreezeMessage || "Withdrawals are temporarily unavailable. Please contact support.");
     if (numeric > balance) return setError("The requested amount exceeds your available balance.");
     if (settings?.kycRequired && settings?.withdrawalLimitEnabled && user.kycStatus !== "verified" && numeric > Number(settings.unverifiedWithdrawalLimit || 500)) return setError(`Complete KYC to withdraw above ${money(settings.unverifiedWithdrawalLimit || 500)}.`);
     const localRecord = { userId: user.userId, userName: user.name, adminId: user.adminId, type: "investment", amount: numeric, method, accountDetails: details, status: "pending" };
@@ -338,14 +339,15 @@ export function WithdrawalPage() {
   }
   return (
     <div><PageHeader eyebrow="Wallet distributions" title="Withdraw Funds" description="Request a withdrawal from your available wallet balance only." />
+      {user.freezeWithdrawal && <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700"><strong>Withdrawals are temporarily paused.</strong><p className="mt-2 leading-6">{user.withdrawalFreezeMessage || "Please contact support for assistance."}</p><button onClick={() => navigate("/dashboard/support")} className="btn-primary mt-4">Contact Support</button></div>}
       <div className="grid gap-6 lg:grid-cols-[.8fr_1.2fr]"><div className="glass-card h-fit p-6"><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-widest text-slate-400">Available balance</p><p className="display-title mt-2 text-3xl text-navy">{money(user.availableBalance)}</p></div><ArrowUpFromLine className="text-gold" /></div><p className="mt-4 text-xs leading-5 text-slate-500">Referral earnings and locked investment capital are excluded from this withdrawal flow.</p></div>
-      <div className="glass-card p-6 md:p-8">{done ? <div className="py-12 text-center"><CheckCircle2 className="mx-auto text-forest" size={44} /><h2 className="display-title mt-5 text-3xl text-navy">Request received</h2><p className="mt-3 text-sm text-slate-500">Your funds remain in your balance until the request is approved.</p></div> : <form onSubmit={submit} className="space-y-5">{error && <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}<button type="button" onClick={() => navigate("/dashboard/kyc")} className="mt-2 block font-bold underline">Complete KYC now</button></div>}<div className="rounded-xl bg-gold/10 p-4 text-xs leading-5 text-slate-600"><strong>Balance protection:</strong> Stonehaven deducts funds only after an administrator approves your request.{settings?.withdrawalLimitEnabled && user.kycStatus !== "verified" && ` Unverified limit: ${money(settings.unverifiedWithdrawalLimit || 500)}.`}</div><div><label className="label">Amount</label><input className="field" type="number" min="1" required value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={`Up to ${money(balance)}`} /></div><div><label className="label">Payment method</label><select className="field" value={method} onChange={(e) => setMethod(e.target.value)}><option>Bank transfer</option><option>USDT (TRC20)</option><option>Bitcoin</option><option>Mobile money</option></select></div><div><label className="label">Account or wallet details</label><textarea className="field min-h-28 resize-none" required value={details} onChange={(e) => setDetails(e.target.value)} /></div><button className="btn-primary w-full">Submit withdrawal request <ArrowUpFromLine size={17} /></button></form>}</div></div>
+      <div className="glass-card p-6 md:p-8">{done ? <div className="py-12 text-center"><CheckCircle2 className="mx-auto text-forest" size={44} /><h2 className="display-title mt-5 text-3xl text-navy">Request received</h2><p className="mt-3 text-sm text-slate-500">Your funds remain in your balance until the request is approved.</p></div> : user.freezeWithdrawal ? <div className="grid min-h-72 place-items-center text-center"><div><LockKeyhole className="mx-auto text-red-400" size={42} /><h2 className="display-title mt-4 text-2xl text-navy">Withdrawal form locked</h2><p className="mx-auto mt-3 max-w-md text-sm leading-6 text-slate-500">{user.withdrawalFreezeMessage}</p></div></div> : <form onSubmit={submit} className="space-y-5">{error && <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}<button type="button" onClick={() => navigate("/dashboard/kyc")} className="mt-2 block font-bold underline">Complete KYC now</button></div>}<div className="rounded-xl bg-gold/10 p-4 text-xs leading-5 text-slate-600"><strong>Balance protection:</strong> Stonehaven deducts funds only after an administrator approves your request.{settings?.withdrawalLimitEnabled && user.kycStatus !== "verified" && ` Unverified limit: ${money(settings.unverifiedWithdrawalLimit || 500)}.`}</div><div><label className="label">Amount</label><input className="field" type="number" min="1" required value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={`Up to ${money(balance)}`} /></div><div><label className="label">Payment method</label><select className="field" value={method} onChange={(e) => setMethod(e.target.value)}><option>Bank transfer</option><option>USDT (TRC20)</option><option>Bitcoin</option><option>Mobile money</option></select></div><div><label className="label">Account or wallet details</label><textarea className="field min-h-28 resize-none" required value={details} onChange={(e) => setDetails(e.target.value)} /></div><button className="btn-primary w-full">Submit withdrawal request <ArrowUpFromLine size={17} /></button></form>}</div></div>
     </div>
   );
 }
 
 export function ReferralsPage() {
-  const { user } = useAuth(); const navigate = useNavigate(); const [users, setUsers] = useState([]); const [transactions, setTransactions] = useState([]); const [copied, setCopied] = useState(false);
+  const { user } = useAuth(); const navigate = useNavigate(); const { format: money } = useCurrency(); const [users, setUsers] = useState([]); const [transactions, setTransactions] = useState([]); const [copied, setCopied] = useState(false);
   useEffect(() => {
     Promise.all([dataService.listUsers(user.adminId), dataService.listForUser("transactions", user.userId)])
       .then(([items, transactionItems]) => {
@@ -367,6 +369,8 @@ export function ReferralsPage() {
 
 export function ReferralWithdrawalPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const { format: money } = useCurrency();
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("Bank transfer");
   const [details, setDetails] = useState("");
@@ -378,6 +382,7 @@ export function ReferralWithdrawalPage() {
     event.preventDefault();
     const numeric = Number(amount);
     setError("");
+    if (user.freezeWithdrawal) return setError(user.withdrawalFreezeMessage || "Withdrawals are temporarily unavailable. Please contact support.");
     if (!Number.isFinite(numeric) || numeric <= 0) return setError("Enter a valid withdrawal amount.");
     if (numeric > Number(user.referralBalance || 0)) return setError("The requested amount exceeds your referral balance.");
     setBusy(true);
@@ -393,11 +398,11 @@ export function ReferralWithdrawalPage() {
     }
   }
 
-  return <div><PageHeader eyebrow="Referral earnings" title="Withdraw Referral Earnings" description="This request can use only your available referral balance." /><div className="grid gap-6 lg:grid-cols-[.8fr_1.2fr]"><div className="glass-card h-fit p-6"><p className="text-xs font-bold uppercase tracking-widest text-slate-400">Referral balance</p><p className="display-title mt-2 text-4xl text-navy">{money(user.referralBalance)}</p><p className="mt-4 text-xs leading-5 text-slate-500">Available balance, locked capital, and investment returns are excluded.</p></div><div className="glass-card p-6 md:p-8">{done ? <div className="py-10 text-center"><CheckCircle2 className="mx-auto text-forest" size={46} /><h2 className="display-title mt-5 text-3xl text-navy">Referral Withdrawal Submitted</h2><p className="mt-3 text-sm text-slate-500">Your referral balance will be deducted only after approval.</p></div> : <form onSubmit={submit} className="space-y-5">{error && <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</div>}<div><label className="label">Withdrawable amount</label><input className="field bg-slate-50" readOnly value={money(user.referralBalance)} /></div><div><label className="label">Withdrawal amount</label><input className="field" type="number" min="1" max={user.referralBalance} required value={amount} onChange={(event) => setAmount(event.target.value)} /></div><div><label className="label">Withdrawal method</label><select className="field" value={method} onChange={(event) => setMethod(event.target.value)}><option>Bank transfer</option><option>USDT (TRC20)</option><option>Bitcoin</option><option>Mobile money</option></select></div><div><label className="label">Account or wallet details</label><textarea className="field min-h-28 resize-none" required value={details} onChange={(event) => setDetails(event.target.value)} /></div><button disabled={busy} className="btn-primary w-full">{busy ? "Submitting..." : "Submit Referral Withdrawal"} <ArrowUpFromLine size={17} /></button></form>}</div></div></div>;
+  return <div><PageHeader eyebrow="Referral earnings" title="Withdraw Referral Earnings" description="This request can use only your available referral balance." />{user.freezeWithdrawal && <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700"><strong>Withdrawals are temporarily paused.</strong><p className="mt-2 leading-6">{user.withdrawalFreezeMessage}</p><button onClick={() => navigate("/dashboard/support")} className="btn-primary mt-4">Contact Support</button></div>}<div className="grid gap-6 lg:grid-cols-[.8fr_1.2fr]"><div className="glass-card h-fit p-6"><p className="text-xs font-bold uppercase tracking-widest text-slate-400">Referral balance</p><p className="display-title mt-2 text-4xl text-navy">{money(user.referralBalance)}</p><p className="mt-4 text-xs leading-5 text-slate-500">Available balance, locked capital, and investment returns are excluded.</p></div><div className="glass-card p-6 md:p-8">{done ? <div className="py-10 text-center"><CheckCircle2 className="mx-auto text-forest" size={46} /><h2 className="display-title mt-5 text-3xl text-navy">Referral Withdrawal Submitted</h2><p className="mt-3 text-sm text-slate-500">Your referral balance will be deducted only after approval.</p></div> : user.freezeWithdrawal ? <div className="grid min-h-72 place-items-center text-center"><div><LockKeyhole className="mx-auto text-red-400" size={42} /><h2 className="display-title mt-4 text-2xl text-navy">Withdrawal form locked</h2><p className="mx-auto mt-3 max-w-md text-sm leading-6 text-slate-500">{user.withdrawalFreezeMessage}</p></div></div> : <form onSubmit={submit} className="space-y-5">{error && <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</div>}<div><label className="label">Withdrawable amount</label><input className="field bg-slate-50" readOnly value={money(user.referralBalance)} /></div><div><label className="label">Withdrawal amount</label><input className="field" type="number" min="1" max={user.referralBalance} required value={amount} onChange={(event) => setAmount(event.target.value)} /></div><div><label className="label">Withdrawal method</label><select className="field" value={method} onChange={(event) => setMethod(event.target.value)}><option>Bank transfer</option><option>USDT (TRC20)</option><option>Bitcoin</option><option>Mobile money</option></select></div><div><label className="label">Account or wallet details</label><textarea className="field min-h-28 resize-none" required value={details} onChange={(event) => setDetails(event.target.value)} /></div><button disabled={busy} className="btn-primary w-full">{busy ? "Submitting..." : "Submit Referral Withdrawal"} <ArrowUpFromLine size={17} /></button></form>}</div></div></div>;
 }
 
 export function TransactionsPage() {
-  const { user } = useAuth(); const [items, setItems] = useState([]); const [loading, setLoading] = useState(true);
+  const { user } = useAuth(); const { format: money } = useCurrency(); const [items, setItems] = useState([]); const [loading, setLoading] = useState(true);
   useEffect(() => {
     loadTransactionHistory(user.userId).then((result) => {
       setItems(result);
@@ -412,7 +417,30 @@ export function TransactionsPage() {
 }
 
 export function SettingsPage() {
-  const { user } = useAuth();
+  const { user, refresh } = useAuth();
   const { activeInvestmentMode, setActiveInvestmentMode } = useOutletContext();
-  return <div><PageHeader eyebrow="Preferences" title="Dashboard settings" description="Choose the investment ecosystem shown across your dashboard, portfolio, and earnings." /><div className="glass-card max-w-3xl p-6 md:p-7"><p className="label">Default investment mode</p><div className="grid gap-3 sm:grid-cols-3">{INVESTMENT_MODES.map((mode) => <button key={mode.value} onClick={() => setActiveInvestmentMode(mode.value)} className={`min-h-28 rounded-xl border p-5 text-left ${activeInvestmentMode === mode.value ? "border-gold bg-gold/10 ring-4 ring-gold/10" : "border-slate-200"}`}><p className="font-bold text-navy">{mode.label}</p><p className="mt-1 text-xs leading-5 text-slate-500">{mode.value === "crypto" ? "Digital assets and structured crypto plans" : mode.value === "stock" ? "Global equities and stock investments" : "Short-horizon fixed-maturity plans"}</p></button>)}</div><p className="mt-6 text-xs text-slate-400">{investmentModeLabel(activeInvestmentMode)} is saved as the investment preference for {user.email}.</p></div></div>;
+  const [currency, setCurrency] = useState(user?.currency || "USD");
+
+  async function saveCurrency(c) {
+    setCurrency(c);
+    await dataService.updateUser(user.userId, { currency: c });
+    await refresh();
+  }
+
+  return <div><PageHeader eyebrow="Preferences" title="Dashboard settings" description="Choose the investment ecosystem shown across your dashboard, portfolio, and earnings." /><div className="glass-card max-w-3xl p-6 md:p-7 space-y-8">
+    <div>
+      <p className="label">Default investment mode</p>
+      <div className="grid gap-3 sm:grid-cols-3">{INVESTMENT_MODES.map((mode) => <button key={mode.value} onClick={() => setActiveInvestmentMode(mode.value)} className={`min-h-28 rounded-xl border p-5 text-left ${activeInvestmentMode === mode.value ? "border-gold bg-gold/10 ring-4 ring-gold/10" : "border-slate-200"}`}><p className="font-bold text-navy">{mode.label}</p><p className="mt-1 text-xs leading-5 text-slate-500">{mode.value === "crypto" ? "Digital assets and structured crypto plans" : mode.value === "stock" ? "Global equities and stock investments" : "Short-horizon fixed-maturity plans"}</p></button>)}</div>
+      <p className="mt-6 text-xs text-slate-400">{investmentModeLabel(activeInvestmentMode)} is saved as the investment preference for {user.email}.</p>
+    </div>
+    <div className="border-t border-slate-200 pt-8">
+      <p className="label">Currency Preference</p>
+      <p className="mt-1 mb-4 text-xs leading-5 text-slate-500">Choose how your balances are displayed across the platform.</p>
+      <select className="field max-w-xs" value={currency} onChange={(e) => saveCurrency(e.target.value)}>
+        {CURRENCIES.map((c) => (
+          <option key={c.code} value={c.code}>{c.code} — {c.label}</option>
+        ))}
+      </select>
+    </div>
+  </div></div>;
 }

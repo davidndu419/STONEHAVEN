@@ -6,7 +6,8 @@ import { dataService } from "../lib/dataService";
 import { calculatePlan, createFlashInvestment, createWeeklyInvestment, processInvestmentTimers } from "../lib/investmentEngine";
 import { EmptyState, Modal, PageHeader, StatusBadge } from "../components/UI";
 import { TradingViewChart } from "../components/TradingViewWidget";
-import { FlashCalculator, InvestmentCard, InvestmentDetail, MiniBarChart, money, PlanCalculator, Timeline } from "../components/InvestmentUI";
+import { FlashCalculator, InvestmentCard, InvestmentDetail, MiniBarChart, PlanCalculator, Timeline } from "../components/InvestmentUI";
+import { useCurrency } from "../lib/currency";
 import { investmentModeLabel } from "../lib/investmentMode";
 
 function AssetMark({ asset, square = false }) {
@@ -25,6 +26,7 @@ function AssetSelector({ assets, selected, onSelect, square = false }) {
 }
 
 function AssetOverview({ asset, kind, marketOpen, onChart }) {
+  const { format: money } = useCurrency();
   const price = asset.referencePrice ? money(asset.referencePrice) : "Market linked";
   const risk = kind === "stock" ? "Moderate" : "Growth";
   const status = kind === "stock" ? (marketOpen ? "Market open" : "Market closed") : "24/7 market";
@@ -42,6 +44,7 @@ function AssetOverview({ asset, kind, marketOpen, onChart }) {
 }
 
 function InvestmentProposal({ asset, tier, tiers, duration, onTierChange, onDurationChange, onReview, kind }) {
+  const { format: money } = useCurrency();
   const projection = tier ? calculatePlan(tier, duration) : null;
   if (!projection) return null;
   return (
@@ -117,6 +120,7 @@ export function InvestmentsPage() {
 export function FlashInvestmentPage() {
   const { user } = useAuth(); 
   const navigate = useNavigate(); 
+  const { format: money } = useCurrency();
   const [settings, setSettings] = useState(null); 
   const [tiers, setTiers] = useState([]); 
   const [selected, setSelected] = useState(null);
@@ -347,6 +351,7 @@ export function LegacyStockResearchPage() {
 
 export function PortfolioPage() {
   const { user } = useAuth(); const navigate = useNavigate(); const [investments, setInvestments] = useState([]); const [detail, setDetail] = useState(null);
+  const { format: money } = useCurrency();
   const { activeInvestmentMode } = useOutletContext();
   const load = useCallback(async () => { const items = await processInvestmentTimers(user.userId); setInvestments(items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))); }, [user.userId]);
   useEffect(() => { load(); }, [load]);
@@ -358,6 +363,7 @@ export function PortfolioPage() {
 
 export function EarningsPage() {
   const { user } = useAuth(); const [items, setItems] = useState([]);
+  const { format: money } = useCurrency();
   const { activeInvestmentMode } = useOutletContext();
   useEffect(() => { dataService.listForUser("investments", user.userId).then((result) => setItems(result.filter((item) => ["completed", "flash done"].includes(item.status) && item.type === activeInvestmentMode))); }, [activeInvestmentMode, user.userId]);
   const total = items.reduce((sum, item) => sum + Number(item.projectedReturn || 0), 0);

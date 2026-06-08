@@ -5,7 +5,9 @@ import { LoadingScreen } from "./UI";
 import { getPlatformSettings } from "../lib/enterprise";
 
 export default function ProtectedRoute({ roles }) {
-  const { user, loading } = useAuth();
+  const auth = useAuth();
+  const user = auth?.user ?? null;
+  const loading = auth?.loading ?? true;
   const location = useLocation();
   const [settings, setSettings] = useState(null);
   useEffect(() => {

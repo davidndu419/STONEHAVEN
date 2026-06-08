@@ -82,7 +82,7 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly([
           "userId", "name", "email", "phone", "country", "role", "adminId",
           "referralCode", "referredBy", "availableBalance", "referralBalance",
-          "lockedBalance", "kycStatus", "status", "onboarded", "createdAt", "lastLogin"
+          "lockedBalance", "kycStatus", "status", "onboarded", "createdAt", "lastLogin", "currency"
         ])
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.email == request.auth.token.email
@@ -102,10 +102,10 @@ service cloud.firestore {
         && isOwner(userId)
         && (
           request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(["name", "phone", "country", "onboarded", "preference", "lastLogin"])
+            .hasOnly(["name", "phone", "country", "onboarded", "preference", "lastLogin", "currency"])
           || (
             request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(["name", "phone", "country", "onboarded", "preference", "lastLogin", "kycStatus"])
+              .hasOnly(["name", "phone", "country", "onboarded", "preference", "lastLogin", "kycStatus", "currency"])
             && request.resource.data.kycStatus == "pending"
           )
         )
@@ -123,7 +123,12 @@ service cloud.firestore {
         && request.resource.data.role == resource.data.role
         && request.resource.data.adminId == resource.data.adminId
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(["status", "kycStatus", "availableBalance", "referralBalance", "lockedBalance"])
+          .hasOnly([
+            "status", "kycStatus", "availableBalance", "referralBalance", "lockedBalance",
+            "freezeWithdrawal", "withdrawalFreezeMessage", "withdrawalFrozenAt",
+            "withdrawalFrozenBy", "withdrawalUnfrozenAt", "withdrawalUnfrozenBy",
+            "statusChangedAt", "statusChangedBy", "statusReason"
+          ])
       );
     }
 
@@ -143,7 +148,10 @@ service cloud.firestore {
         && request.resource.data.adminId == resource.data.adminId
         && request.resource.data.amount == resource.data.amount
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(["status", "reviewedAt"]);
+          .hasOnly([
+            "status", "reviewedAt", "approvedAt", "approvedBy",
+            "declineReason", "declinedAt", "declinedBy"
+          ]);
       allow delete: if false;
     }
 
@@ -163,7 +171,10 @@ service cloud.firestore {
         && request.resource.data.amount == resource.data.amount
         && request.resource.data.type == resource.data.type
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(["status", "reviewedAt"]);
+          .hasOnly([
+            "status", "reviewedAt", "approvedAt", "approvedBy",
+            "declineReason", "declinedAt", "declinedBy"
+          ]);
       allow delete: if false;
     }
 
@@ -202,7 +213,9 @@ service cloud.firestore {
           "referralBonusPaid", "timeline", "createdAt", "updatedAt", "cancelledAt",
           "statusReason", "capitalAmount", "durationSeconds",
           "activeElapsedSeconds", "lockedEarned", "lastActivatedAt",
-          "totalPausedSeconds", "lastLockedCalculationAt", "currentWeek"
+          "totalPausedSeconds", "lastLockedCalculationAt", "currentWeek",
+          "updatedBy", "archived", "archivedAt", "archivedBy",
+          "completedBy"
         ])
       ) || (
         ownsRecord()
@@ -238,7 +251,8 @@ service cloud.firestore {
           )
         )
         && request.resource.data.keys().hasOnly([
-          "userId", "adminId", "type", "label", "amount", "status", "createdAt"
+          "userId", "adminId", "type", "label", "amount", "status", "createdAt",
+          "reason", "adminActorId", "adminActorName", "targetId"
         ]);
       allow update, delete: if false;
     }
@@ -278,7 +292,10 @@ service cloud.firestore {
         && request.resource.data.userId == resource.data.userId
         && request.resource.data.adminId == resource.data.adminId
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(["status", "rejectionReason", "requestDetails", "reviewedAt"]);
+          .hasOnly([
+            "status", "rejectionReason", "requestDetails", "reviewedAt",
+            "reviewedBy", "reviewedByName"
+          ]);
       allow delete: if false;
     }
 
@@ -315,10 +332,32 @@ service cloud.firestore {
           && request.resource.data.adminId == resource.data.adminId
           && request.resource.data.keys().hasOnly([
             "ticketId", "userId", "userName", "adminId", "subject", "category",
-            "status", "messages", "adminUnread", "userUnread", "createdAt", "updatedAt"
+            "status", "messages", "adminUnread", "userUnread", "createdAt", "updatedAt",
+            "deletedForUser", "deletedForUserAt", "deletedForUserBy",
+            "archivedForAdmin", "archivedForAdminAt", "archivedForAdminBy"
           ])
         );
       allow delete: if false;
+    }
+
+    match /adminNotes/{documentId} {
+      allow read: if scopedRecord();
+      allow create: if isAdmin()
+        && ownsAdminScope(request.resource.data.adminId)
+        && request.resource.data.userId is string
+        && request.resource.data.note is string
+        && request.resource.data.reason is string;
+      allow update, delete: if false;
+    }
+
+    match /adminAuditRecords/{documentId} {
+      allow read: if scopedRecord();
+      allow create: if isAdmin()
+        && ownsAdminScope(request.resource.data.adminId)
+        && request.resource.data.userId is string
+        && request.resource.data.type is string
+        && request.resource.data.reason is string;
+      allow update, delete: if false;
     }
 
     match /referrals/{documentId} {

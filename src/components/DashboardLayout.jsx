@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
   ArrowDownToLine, ArrowUpFromLine, BarChart3, Bell, Bitcoin, Building2, ChevronLeft, ChevronRight, CreditCard,
@@ -32,8 +32,7 @@ const adminNav = [
   ["flash", "Flash settings", Flame],
   ["coins", "Coin library", Bitcoin],
   ["stocks", "Stock library", LineChart],
-  ["deposits", "Deposits", ArrowDownToLine],
-  ["withdrawals", "Withdrawals", ArrowUpFromLine],
+  ["approvals", "Approvals", ShieldCheck],
   ["methods", "Deposit methods", CreditCard],
   ["referrals", "Referrals", WalletCards],
   ["kyc", "KYC review", ShieldCheck],
@@ -53,11 +52,28 @@ export default function DashboardLayout({ admin = false, superAdmin = false }) {
   const [activeInvestmentMode, setActiveInvestmentModeState] = useState(() =>
     normalizeInvestmentMode(localStorage.getItem("stonehaven-investment-mode") || user?.preference),
   );
+  const [supportUnread, setSupportUnread] = useState(0);
+  const sidebarSeenKey = user ? `stonehaven-sidebar-seen:${user.userId}` : "";
+  const [sidebarSeen, setSidebarSeen] = useState(() => {
+    if (!user) return {};
+    try {
+      return JSON.parse(localStorage.getItem(`stonehaven-sidebar-seen:${user.userId}`) || "{}");
+    } catch {
+      return {};
+    }
+  });
+  const [adminBadgeCounts, setAdminBadgeCounts] = useState({});
   const base = superAdmin ? "/superadmin" : "/admin";
   const adminItems = superAdmin
     ? [...adminNav, ["onboarding-links", "Onboarding links", Link2], ["testimonials", "Testimonials", Sparkles], ["company", "Company info", Building2], ["content", "Content management", FileText], ["branding", "Platform branding", Image], ["platform-settings", "Platform settings", Settings]]
     : adminNav;
   const navigation = admin ? adminItems.map(([path, label, Icon]) => [`${base}/${path}`, label, Icon]) : userNav;
+
+  const markSidebarSeen = useCallback((section) => {
+    const next = { ...sidebarSeen, [section]: Date.now() };
+    setSidebarSeen(next);
+    if (sidebarSeenKey) localStorage.setItem(sidebarSeenKey, JSON.stringify(next));
+  }, [sidebarSeen, sidebarSeenKey]);
 
   function setActiveInvestmentMode(value) {
     const mode = normalizeInvestmentMode(value);
@@ -77,6 +93,61 @@ export default function DashboardLayout({ admin = false, superAdmin = false }) {
     const timer = setInterval(loadNotifications, 10000);
     return () => clearInterval(timer);
   }, [admin, user.userId]);
+
+  useEffect(() => {
+    const loadSupport = () => {
+      if (admin) {
+        dataService.list("supportTickets", user.adminId, superAdmin).then(items => {
+          setSupportUnread(items.filter(i => i.adminUnread && i.status !== "closed").length);
+        }).catch(() => {});
+      } else {
+        dataService.listForUser("supportTickets", user.userId).then(items => {
+          setSupportUnread(items.filter(i => i.userUnread && i.status !== "closed").length);
+        }).catch(() => {});
+      }
+    };
+    loadSupport();
+    const timer = setInterval(loadSupport, 15000);
+    return () => clearInterval(timer);
+  }, [admin, user.adminId, user.userId, superAdmin]);
+
+  useEffect(() => {
+    if (!admin) return;
+    const changedAfter = (item, section) =>
+      new Date(item.updatedAt || item.createdAt || 0).getTime() > Number(sidebarSeen[section] || 0);
+    const loadAdminBadges = async () => {
+      const names = ["users", "investments", "deposits", "withdrawals", "kycSubmissions", "supportTickets", "announcements"];
+      const results = await Promise.allSettled([
+        dataService.listUsers(user.adminId, superAdmin),
+        ...names.slice(1).map((name) => dataService.list(name, user.adminId, superAdmin)),
+      ]);
+      const value = (index) => results[index].status === "fulfilled" ? results[index].value : [];
+      const users = value(0);
+      const investments = value(1);
+      const deposits = value(2);
+      const withdrawals = value(3);
+      const kyc = value(4);
+      const tickets = value(5);
+      const announcements = value(6);
+      setAdminBadgeCounts({
+        users: users.filter((item) => item.role === "user" && changedAfter(item, "users")).length,
+        investments: investments.filter((item) =>
+          ["pending", "pending_approval", "awaiting_funding", "frozen"].includes(item.status)
+          && changedAfter(item, "investments")
+        ).length,
+        approvals:
+          deposits.filter((item) => item.status === "pending" && changedAfter(item, "approvals")).length
+          + withdrawals.filter((item) => item.status === "pending" && changedAfter(item, "approvals")).length,
+        referrals: users.filter((item) => item.role === "user" && item.referredBy && changedAfter(item, "referrals")).length,
+        kyc: kyc.filter((item) => item.status === "pending" && changedAfter(item, "kyc")).length,
+        support: tickets.filter((item) => item.adminUnread && changedAfter(item, "support")).length,
+        announcements: announcements.filter((item) => ["draft", "scheduled"].includes(item.status) && changedAfter(item, "announcements")).length,
+      });
+    };
+    loadAdminBadges();
+    const timer = setInterval(loadAdminBadges, 10000);
+    return () => clearInterval(timer);
+  }, [admin, sidebarSeen, superAdmin, user.adminId]);
   const unread = notifications.filter((item) => !item.read).length;
 
   async function signOutUser() {
@@ -96,13 +167,23 @@ export default function DashboardLayout({ admin = false, superAdmin = false }) {
       <div className="px-4 py-6">
         {!collapsed && <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[.2em] text-white/35">{admin ? "Management" : "Private client"}</p>}
         <nav className="space-y-1.5">
-          {navigation.map(([path, label, Icon]) => (
-            <NavLink key={path} to={path} end={path.endsWith("dashboard")} onClick={() => setMobileOpen(false)}
-              className={({ isActive }) => `flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${isActive ? "bg-gold text-navy shadow-gold" : "text-white/60 hover:bg-white/[.07] hover:text-white"}`}>
-              <Icon size={19} className="shrink-0" />
-              {!collapsed && <span className="font-medium">{label}</span>}
-            </NavLink>
-          ))}
+          {navigation.map(([path, label, Icon]) => {
+            const section = path.split("/").filter(Boolean).at(-1);
+            const badgeCount = admin
+              ? Number(adminBadgeCounts[section] || 0)
+              : path.endsWith("/support") ? supportUnread
+                : path.endsWith("/notifications") ? unread : 0;
+            const showBadge = badgeCount > 0;
+            return (
+              <NavLink key={path} to={path} end={path.endsWith("dashboard")} onClick={() => { setMobileOpen(false); if (admin) markSidebarSeen(section); }}
+                className={({ isActive }) => `relative flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${isActive ? "bg-gold text-navy shadow-gold" : "text-white/60 hover:bg-white/[.07] hover:text-white"}`}>
+                <Icon size={19} className="shrink-0" />
+                {!collapsed && <span className="font-medium flex-1">{label}</span>}
+                {!collapsed && showBadge && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-burgundy px-1 text-[9px] font-bold text-white">{badgeCount > 99 ? "99+" : badgeCount}</span>}
+                {collapsed && showBadge && <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-burgundy" />}
+              </NavLink>
+            );
+          })}
         </nav>
       </div>
       <div className="mt-auto border-t border-white/10 p-4">
