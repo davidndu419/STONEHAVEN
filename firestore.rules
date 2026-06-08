@@ -1,136 +1,528 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() { return request.auth != null; }
-    function profile() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
-    function isSuperAdmin() { return signedIn() && profile().role == "superadmin"; }
-    function isSubAdmin() { return signedIn() && profile().role == "sub-admin"; }
-    function isActiveUser() { return signedIn() && profile().status == "active"; }
-    function ownsAdminScope(adminId) {
-      return isSuperAdmin() || (isSubAdmin() && profile().adminId == adminId);
+    function signedIn() {
+      return request.auth != null;
     }
-    function isOwner(userId) { return signedIn() && request.auth.uid == userId; }
-    function isScopedLibrary(collection) {
-      return collection == "depositMethods"
-        || collection == "flashSettings"
-        || collection == "flashTiers"
-        || collection == "coins"
-        || collection == "stocks";
+
+    function tokenRole() {
+      return signedIn() && request.auth.token.role is string
+        ? request.auth.token.role
+        : "user";
+    }
+
+    function tokenAdminId() {
+      return signedIn() && request.auth.token.adminId is string
+        ? request.auth.token.adminId
+        : "";
+    }
+
+    function profileExists() {
+      return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function profile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function accountControlExists(userId) {
+      return exists(/databases/$(database)/documents/accountControls/$(userId));
+    }
+
+    function accountControl(userId) {
+      return get(/databases/$(database)/documents/accountControls/$(userId)).data;
+    }
+
+    function lifecycleAllowsAccess(userId) {
+      return !accountControlExists(userId) || accountControl(userId).status == "active";
+    }
+
+    function isActive() {
+      return profileExists()
+        && profile().status == "active"
+        && lifecycleAllowsAccess(request.auth.uid);
+    }
+
+    function isSuperAdmin() {
+      return isActive() && tokenRole() == "superadmin";
+    }
+
+    function isSubAdmin() {
+      return isActive() && tokenRole() == "sub-admin";
+    }
+
+    function isAdmin() {
+      return isSuperAdmin() || isSubAdmin();
+    }
+
+    function ownsAdminScope(adminId) {
+      return isSuperAdmin() || (isSubAdmin() && tokenAdminId() == adminId);
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function ownsRecord() {
+      return isActive() && resource.data.userId == request.auth.uid;
+    }
+
+    function scopedRecord() {
+      return isAdmin() && ownsAdminScope(resource.data.adminId);
+    }
+
+
+    function validMoney(value) {
+      return value is number && value >= 0;
     }
 
     match /users/{userId} {
-      allow create: if isOwner(userId);
-      allow read: if isOwner(userId) || isSuperAdmin()
-        || (isSubAdmin() && resource.data.adminId == profile().adminId);
-      allow update: if isSuperAdmin()
-        || (isSubAdmin() && resource.data.adminId == profile().adminId)
-        || (isOwner(userId)
-          && request.resource.data.role == resource.data.role
-          && request.resource.data.adminId == resource.data.adminId
-          && request.resource.data.availableBalance == resource.data.availableBalance
-          && request.resource.data.referralBalance == resource.data.referralBalance);
-      allow delete: if isSuperAdmin();
+      allow create: if isOwner(userId)
+        && lifecycleAllowsAccess(userId)
+        && request.resource.data.keys().hasOnly([
+          "userId", "name", "email", "phone", "country", "role", "adminId",
+          "referralCode", "referredBy", "availableBalance", "referralBalance",
+          "lockedBalance", "kycStatus", "status", "onboarded", "createdAt", "lastLogin"
+        ])
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role == "user"
+        && request.resource.data.adminId == "HERITAGE-HQ"
+        && request.resource.data.availableBalance == 0
+        && request.resource.data.referralBalance == 0
+        && request.resource.data.lockedBalance == 0
+        && request.resource.data.kycStatus == "unverified"
+        && request.resource.data.status == "active"
+        && request.resource.data.onboarded == false;
+      allow delete: if false;
+      allow read: if isOwner(userId)
+        || (isAdmin() && (isSuperAdmin() || resource.data.adminId == tokenAdminId()));
+      allow update: if (
+        isActive()
+        && isOwner(userId)
+        && (
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(["name", "phone", "country", "onboarded", "preference", "lastLogin"])
+          || (
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(["name", "phone", "country", "onboarded", "preference", "lastLogin", "kycStatus"])
+            && request.resource.data.kycStatus == "pending"
+          )
+        )
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.adminId == resource.data.adminId
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.availableBalance == resource.data.availableBalance
+        && request.resource.data.referralBalance == resource.data.referralBalance
+        && request.resource.data.lockedBalance == resource.data.lockedBalance
+      ) || (
+        isAdmin()
+        && ownsAdminScope(resource.data.adminId)
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.adminId == resource.data.adminId
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["status", "kycStatus", "availableBalance", "referralBalance", "lockedBalance"])
+      );
+    }
+
+    match /deposits/{documentId} {
+      allow read: if ownsRecord() || scopedRecord();
+      allow create: if isActive()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.adminId == profile().adminId
+        && request.resource.data.status == "pending"
+        && request.resource.data.keys().hasOnly([
+          "userId", "userName", "adminId", "methodId", "methodName", "amount",
+          "reference", "transactionHash", "proofUrl", "status", "investmentId",
+          "week", "depositType", "balanceContribution", "totalRequired", "createdAt"
+        ]);
+      allow update: if scopedRecord()
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.adminId == resource.data.adminId
+        && request.resource.data.amount == resource.data.amount
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["status", "reviewedAt"]);
+      allow delete: if false;
+    }
+
+    match /withdrawals/{documentId} {
+      allow read: if ownsRecord() || scopedRecord();
+      allow create: if isActive()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.adminId == profile().adminId
+        && request.resource.data.status == "pending"
+        && request.resource.data.keys().hasOnly([
+          "userId", "userName", "adminId", "type", "amount", "method",
+          "accountDetails", "status", "createdAt"
+        ]);
+      allow update: if scopedRecord()
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.adminId == resource.data.adminId
+        && request.resource.data.amount == resource.data.amount
+        && request.resource.data.type == resource.data.type
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["status", "reviewedAt"]);
+      allow delete: if false;
+    }
+
+    match /investments/{documentId} {
+      allow read: if ownsRecord() || scopedRecord();
+      allow create: if isActive()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.adminId == profile().adminId
+        && request.resource.data.status in ["pending", "awaiting_funding"]
+        && request.resource.data.keys().hasOnly([
+          "userId", "userName", "adminId", "type", "planId", "investmentType",
+          "duration", "expectedMaturityDate", "assetId", "assetName",
+          "ticker", "planName", "capital", "weeklyCapital", "projectedReturn",
+          "roi", "expectedProfit", "expectedReturn", "fundingSource",
+          "durationHours", "durationMonths", "totalWeeks", "completedWeeks",
+          "referencePrice", "status", "pausedDays", "pausedAt", "startedAt",
+          "maturityAt", "completedAt", "nextDueAt", "reminderSentWeek",
+          "referralBonusPaid", "timeline", "createdAt", "capitalAmount",
+          "durationSeconds", "activeElapsedSeconds", "lockedEarned",
+          "lastActivatedAt", "totalPausedSeconds", "lastLockedCalculationAt",
+          "currentWeek"
+        ]);
+      allow delete: if false;
+      allow update: if (
+        scopedRecord()
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.adminId == resource.data.adminId
+        && request.resource.data.keys().hasOnly([
+          "userId", "userName", "adminId", "type", "planId", "investmentType",
+          "duration", "expectedMaturityDate", "assetId", "assetName",
+          "ticker", "planName", "capital", "weeklyCapital", "projectedReturn",
+          "roi", "expectedProfit", "expectedReturn", "fundingSource",
+          "durationHours", "durationMonths", "totalWeeks", "completedWeeks",
+          "referencePrice", "status", "pausedDays", "pausedAt", "startedAt",
+          "maturityAt", "completedAt", "nextDueAt", "reminderSentWeek",
+          "referralBonusPaid", "timeline", "createdAt", "updatedAt", "cancelledAt",
+          "statusReason", "capitalAmount", "durationSeconds",
+          "activeElapsedSeconds", "lockedEarned", "lastActivatedAt",
+          "totalPausedSeconds", "lastLockedCalculationAt", "currentWeek"
+        ])
+      ) || (
+        ownsRecord()
+        && resource.data.status == "awaiting_funding"
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.adminId == resource.data.adminId
+        && (
+          (
+            request.resource.data.status == "cancelled"
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(["status", "cancelledAt"])
+          ) || (
+            request.resource.data.status == "pending_approval"
+            && request.resource.data.fundingSource in ["new_deposit", "available_balance"]
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(["status", "fundingSource"])
+          )
+        )
+      );
+    }
+
+    match /transactions/{documentId} {
+      allow read: if ownsRecord() || scopedRecord();
+      allow create: if (
+          (
+            isActive()
+            && request.resource.data.userId == request.auth.uid
+            && request.resource.data.adminId == profile().adminId
+            && request.resource.data.status == "pending"
+          ) || (
+            isAdmin()
+            && ownsAdminScope(request.resource.data.adminId)
+          )
+        )
+        && request.resource.data.keys().hasOnly([
+          "userId", "adminId", "type", "label", "amount", "status", "createdAt"
+        ]);
+      allow update, delete: if false;
     }
 
     match /notifications/{documentId} {
-      allow read: if isActiveUser() && (resource.data.userId == request.auth.uid || ownsAdminScope(resource.data.adminId));
-      allow create: if isActiveUser() && (request.resource.data.userId == request.auth.uid || ownsAdminScope(request.resource.data.adminId));
-      allow update: if isActiveUser() && (
-        ownsAdminScope(resource.data.adminId)
-        || (resource.data.userId == request.auth.uid
-          && request.resource.data.userId == resource.data.userId
-          && request.resource.data.adminId == resource.data.adminId
-          && request.resource.data.title == resource.data.title
-          && request.resource.data.message == resource.data.message)
-      );
-      allow delete: if isSuperAdmin() || ownsAdminScope(resource.data.adminId);
-    }
-
-    match /supportTickets/{documentId} {
-      allow read: if isActiveUser() && (resource.data.userId == request.auth.uid || ownsAdminScope(resource.data.adminId));
-      allow create: if isActiveUser() && request.resource.data.userId == request.auth.uid
-        && request.resource.data.adminId == profile().adminId;
-      allow update: if isActiveUser() && (
-        ownsAdminScope(resource.data.adminId)
-        || (resource.data.userId == request.auth.uid
-          && request.resource.data.userId == resource.data.userId
-          && request.resource.data.adminId == resource.data.adminId
-          && request.resource.data.ticketId == resource.data.ticketId
-          && request.resource.data.status == resource.data.status
-          && request.resource.data.subject == resource.data.subject)
-      );
-      allow delete: if ownsAdminScope(resource.data.adminId);
-    }
-
-    match /announcements/{documentId} {
-      allow read: if isActiveUser() && (
-        ownsAdminScope(resource.data.adminId)
-        || (resource.data.status == "published"
-          && (resource.data.adminId == profile().adminId || resource.data.adminId == "GLOBAL"))
-      );
-      allow create: if isActiveUser() && ownsAdminScope(request.resource.data.adminId);
-      allow update, delete: if isActiveUser() && ownsAdminScope(resource.data.adminId);
+      allow read: if ownsRecord() || scopedRecord();
+      allow create: if isAdmin()
+        && ownsAdminScope(request.resource.data.adminId)
+        && request.resource.data.keys().hasOnly([
+          "userId", "adminId", "type", "title", "message", "announcementId",
+          "read", "dismissed", "createdAt"
+        ])
+        && request.resource.data.userId is string
+        && request.resource.data.adminId is string
+        && request.resource.data.title is string
+        && request.resource.data.message is string
+        && request.resource.data.read == false;
+      allow update: if ownsRecord()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["read", "dismissed"])
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.adminId == resource.data.adminId;
+      allow delete: if false;
     }
 
     match /kycSubmissions/{documentId} {
-      allow read: if isActiveUser() && (resource.data.userId == request.auth.uid || ownsAdminScope(resource.data.adminId));
-      allow create: if isActiveUser() && request.resource.data.userId == request.auth.uid
-        && request.resource.data.adminId == profile().adminId;
-      allow update: if isActiveUser() && (
-        ownsAdminScope(resource.data.adminId)
-        || (resource.data.userId == request.auth.uid
-          && resource.data.status == "rejected"
-          && request.resource.data.status == "pending"
+      allow read: if ownsRecord() || scopedRecord();
+      allow create: if isActive()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.adminId == profile().adminId
+        && request.resource.data.status == "pending"
+        && request.resource.data.keys().hasOnly([
+          "userId", "userName", "adminId", "legalName", "dateOfBirth", "nationality",
+          "address", "idType", "documents", "status", "rejectionReason",
+          "requestDetails", "createdAt"
+        ]);
+      allow update: if scopedRecord()
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.adminId == resource.data.adminId
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["status", "rejectionReason", "requestDetails", "reviewedAt"]);
+      allow delete: if false;
+    }
+
+    match /kyc/{documentId} {
+      allow read: if ownsRecord() || scopedRecord();
+      allow create, update, delete: if false;
+    }
+
+    match /supportTickets/{documentId} {
+      allow read: if ownsRecord() || scopedRecord();
+      allow create: if isActive()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.adminId == profile().adminId
+        && request.resource.data.keys().hasOnly([
+          "ticketId", "userId", "userName", "adminId", "subject", "category",
+          "status", "messages", "adminUnread", "userUnread", "createdAt"
+        ])
+        && request.resource.data.ticketId is string
+        && request.resource.data.subject is string
+        && request.resource.data.category is string
+        && request.resource.data.status == "open"
+        && request.resource.data.messages is list;
+      allow update: if (
+          ownsRecord()
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(["messages", "adminUnread", "userUnread", "updatedAt"])
           && request.resource.data.userId == resource.data.userId
-          && request.resource.data.adminId == resource.data.adminId)
-      );
-      allow delete: if isSuperAdmin();
+          && request.resource.data.adminId == resource.data.adminId
+          && request.resource.data.status == resource.data.status
+          && request.resource.data.subject == resource.data.subject
+        ) || (
+          scopedRecord()
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.adminId == resource.data.adminId
+          && request.resource.data.keys().hasOnly([
+            "ticketId", "userId", "userName", "adminId", "subject", "category",
+            "status", "messages", "adminUnread", "userUnread", "createdAt", "updatedAt"
+          ])
+        );
+      allow delete: if false;
+    }
+
+    match /referrals/{documentId} {
+      allow read: if ownsRecord() || scopedRecord();
+      allow create, update, delete: if false;
+    }
+
+    match /adminInvitations/{documentId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /accountControls/{userId} {
+      allow read: if isOwner(userId);
+      allow create, update, delete: if false;
+    }
+
+    match /adminScopes/{documentId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /depositMethods/{documentId} {
+      allow read: if isActive()
+        && (ownsAdminScope(resource.data.adminId)
+          || (resource.data.adminId == profile().adminId && resource.data.active == true));
+      allow create: if isAdmin()
+        && ownsAdminScope(request.resource.data.adminId)
+        && request.resource.data.keys().hasOnly([
+          "adminId", "name", "type", "label", "details", "extraInfo",
+          "active", "iconUrl", "createdAt"
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.active is bool;
+      allow update: if scopedRecord()
+        && request.resource.data.adminId == resource.data.adminId
+        && request.resource.data.keys().hasOnly([
+          "adminId", "name", "type", "label", "details", "extraInfo",
+          "active", "iconUrl", "createdAt"
+        ]);
+      allow delete: if scopedRecord();
+    }
+
+    match /coins/{documentId} {
+      allow read: if isActive()
+        && (ownsAdminScope(resource.data.adminId)
+          || (resource.data.adminId == profile().adminId && resource.data.active == true));
+      allow create: if isAdmin()
+        && ownsAdminScope(request.resource.data.adminId)
+        && request.resource.data.keys().hasOnly([
+          "adminId", "name", "ticker", "tradingViewSymbol", "active",
+          "logoUrl", "tiers", "createdAt"
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.ticker is string
+        && request.resource.data.tiers is list
+        && request.resource.data.active is bool;
+      allow update: if scopedRecord()
+        && request.resource.data.adminId == resource.data.adminId
+        && request.resource.data.keys().hasOnly([
+          "adminId", "name", "ticker", "tradingViewSymbol", "active",
+          "logoUrl", "tiers", "createdAt"
+        ]);
+      allow delete: if scopedRecord();
+    }
+
+    match /stocks/{documentId} {
+      allow read: if isActive()
+        && (ownsAdminScope(resource.data.adminId)
+          || (resource.data.adminId == profile().adminId && resource.data.active == true));
+      allow create: if isAdmin()
+        && ownsAdminScope(request.resource.data.adminId)
+        && request.resource.data.keys().hasOnly([
+          "adminId", "name", "ticker", "tradingViewSymbol", "sector", "active",
+          "logoUrl", "marketCap", "weekHigh", "weekLow", "peRatio", "about",
+          "whyInvest", "historicalReturns", "referencePrice", "tiers", "createdAt"
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.ticker is string
+        && request.resource.data.tiers is list
+        && request.resource.data.active is bool;
+      allow update: if scopedRecord()
+        && request.resource.data.adminId == resource.data.adminId
+        && request.resource.data.keys().hasOnly([
+          "adminId", "name", "ticker", "tradingViewSymbol", "sector", "active",
+          "logoUrl", "marketCap", "weekHigh", "weekLow", "peRatio", "about",
+          "whyInvest", "historicalReturns", "referencePrice", "tiers", "createdAt"
+        ]);
+      allow delete: if scopedRecord();
+    }
+
+    match /flashSettings/{documentId} {
+      allow read: if isActive()
+        && (ownsAdminScope(resource.data.adminId)
+          || (resource.data.adminId == profile().adminId && resource.data.active == true));
+      allow create: if isAdmin()
+        && ownsAdminScope(request.resource.data.adminId)
+        && request.resource.data.keys().hasOnly([
+          "adminId", "name", "durationHours", "active", "createdAt"
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.durationHours is number
+        && request.resource.data.durationHours > 0
+        && request.resource.data.active is bool;
+      allow update: if scopedRecord()
+        && request.resource.data.adminId == resource.data.adminId
+        && request.resource.data.keys().hasOnly([
+          "adminId", "name", "durationHours", "active", "createdAt"
+        ]);
+      allow delete: if scopedRecord();
+    }
+
+    match /flashTiers/{documentId} {
+      allow read: if isActive()
+        && (ownsAdminScope(resource.data.adminId)
+          || (resource.data.adminId == profile().adminId && resource.data.active == true));
+      allow create: if isAdmin()
+        && ownsAdminScope(request.resource.data.adminId)
+        && request.resource.data.keys().hasOnly([
+          "adminId", "capital", "returnAmount", "active", "createdAt"
+        ])
+        && validMoney(request.resource.data.capital)
+        && validMoney(request.resource.data.returnAmount)
+        && request.resource.data.active is bool;
+      allow update: if scopedRecord()
+        && request.resource.data.adminId == resource.data.adminId
+        && request.resource.data.keys().hasOnly([
+          "adminId", "capital", "returnAmount", "active", "createdAt"
+        ]);
+      allow delete: if scopedRecord();
+    }
+
+    match /flashPlans/{documentId} {
+      allow read: if isActive()
+        && (ownsAdminScope(resource.data.adminId)
+          || (resource.data.adminId == profile().adminId && resource.data.active == true));
+      allow create: if isAdmin()
+        && ownsAdminScope(request.resource.data.adminId)
+        && request.resource.data.keys().hasOnly([
+          "adminId", "name", "capital", "returnAmount", "durationHours",
+          "active", "createdAt"
+        ]);
+      allow update: if scopedRecord()
+        && request.resource.data.adminId == resource.data.adminId
+        && request.resource.data.keys().hasOnly([
+          "adminId", "name", "capital", "returnAmount", "durationHours",
+          "active", "createdAt"
+        ]);
+      allow delete: if scopedRecord();
+    }
+
+    match /announcements/{documentId} {
+      allow read: if isAdmin() && ownsAdminScope(resource.data.adminId)
+        || (isActive()
+          && resource.data.status == "published"
+          && (resource.data.adminId == profile().adminId || resource.data.adminId == "GLOBAL"));
+      allow create: if isAdmin()
+        && ownsAdminScope(request.resource.data.adminId)
+        && request.resource.data.keys().hasOnly([
+          "adminId", "title", "message", "type", "audience", "userId",
+          "scheduledAt", "status", "publishedAt", "createdAt"
+        ])
+        && request.resource.data.title is string
+        && request.resource.data.message is string
+        && request.resource.data.status in ["draft", "scheduled", "published"];
+      allow update: if scopedRecord()
+        && request.resource.data.adminId == resource.data.adminId
+        && request.resource.data.keys().hasOnly([
+          "adminId", "title", "message", "type", "audience", "userId",
+          "scheduledAt", "status", "publishedAt", "createdAt"
+        ]);
+      allow delete: if scopedRecord();
     }
 
     match /testimonials/{documentId} {
       allow read: if true;
-      allow write: if isSuperAdmin();
+      allow create, update, delete: if isSuperAdmin();
     }
 
     match /companyContent/{documentId} {
       allow read: if true;
-      allow write: if isSuperAdmin();
+      allow create, update, delete: if isSuperAdmin();
     }
 
     match /teamMembers/{documentId} {
       allow read: if true;
-      allow write: if isSuperAdmin();
+      allow create, update, delete: if isSuperAdmin();
     }
 
     match /faqs/{documentId} {
       allow read: if true;
-      allow write: if isSuperAdmin();
+      allow create, update, delete: if isSuperAdmin();
     }
 
     match /legalDocuments/{documentId} {
       allow read: if true;
-      allow write: if isSuperAdmin();
+      allow create, update, delete: if isSuperAdmin();
     }
 
     match /platformSettings/{documentId} {
       allow read: if true;
-      allow write: if isSuperAdmin();
+      allow create, update, delete: if isSuperAdmin();
     }
 
-    match /{collection}/{documentId} {
-      allow read: if isActiveUser() && (
-        isSuperAdmin()
-        || resource.data.userId == request.auth.uid
-        || ownsAdminScope(resource.data.adminId)
-        || (isScopedLibrary(collection)
-          && resource.data.adminId == profile().adminId
-          && resource.data.active == true)
-      );
-      allow create: if isActiveUser() && (
-        request.resource.data.userId == request.auth.uid
-        || ownsAdminScope(request.resource.data.adminId)
-      );
-      allow update, delete: if isActiveUser() && ownsAdminScope(resource.data.adminId);
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

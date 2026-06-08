@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, ArrowRight, BarChart3, CheckCircle2, Eye, EyeOff, KeyRound, Mail, TrendingUp } from "lucide-react";
+import { ArrowLeft, ArrowRight, BarChart3, CheckCircle2, Eye, EyeOff, Flame, KeyRound, Mail, TrendingUp } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { Brand } from "../components/UI";
 import { dataService } from "../lib/dataService";
@@ -65,7 +65,7 @@ export function RegisterPage() {
   const { user, register } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const [form, setForm] = useState({ name: "", email: "", phone: "", country: "", password: "", confirm: "", referralCode: params.get("ref") || "", adminId: params.get("admin") || "" });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", country: "", password: "", confirm: "", referralCode: params.get("ref") || "", adminId: params.get("admin") || "", invitationToken: params.get("invite") || "" });
   const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
   if (user) return <Navigate to={routeFor(user)} replace />;
 
@@ -112,8 +112,13 @@ export function ForgotPasswordPage() {
 export function OnboardingPage() {
   const { user, refresh } = useAuth(); const navigate = useNavigate(); const [choice, setChoice] = useState("");
   useEffect(() => { if (user?.onboarded) navigate("/dashboard", { replace: true }); }, [user, navigate]);
-  async function continueToDashboard() { await dataService.updateUser(user.userId, { onboarded: true, preference: choice }); await refresh(); navigate("/dashboard"); }
+  async function continueToDashboard() {
+    await dataService.updateUser(user.userId, { onboarded: true, preference: choice });
+    localStorage.setItem("stonehaven-investment-mode", choice);
+    await refresh();
+    navigate("/dashboard");
+  }
   return (
-    <div className="grid min-h-screen place-items-center bg-navy p-5 text-white"><div className="w-full max-w-3xl text-center"><Brand light /><p className="section-kicker mt-16">Welcome to Stonehaven</p><h1 className="display-title mt-4 text-5xl">What would you like to explore first, {user?.name?.split(" ")[0]}?</h1><p className="mt-4 text-sm text-white/50">You can move between both markets at any time.</p><div className="mt-10 grid gap-5 sm:grid-cols-2">{[["crypto", "Digital Assets", "Explore leading crypto markets and structured plans.", TrendingUp], ["stocks", "Global Equities", "Research established public companies and equity plans.", BarChart3]].map(([value, title, text, Icon]) => <button key={value} onClick={() => setChoice(value)} className={`dark-glass p-8 text-left transition ${choice === value ? "border-gold bg-gold/10" : "hover:border-gold/50"}`}><Icon className="text-gold" size={30} /><h2 className="display-title mt-8 text-2xl">{title}</h2><p className="mt-3 text-sm leading-6 text-white/50">{text}</p>{choice === value && <CheckCircle2 className="absolute right-5 top-5 text-gold" size={20} />}</button>)}</div><button disabled={!choice} onClick={continueToDashboard} className="btn-primary mt-8 px-9">Enter your dashboard <ArrowRight size={16} /></button></div></div>
+    <div className="grid min-h-screen place-items-center bg-navy p-5 text-white"><div className="w-full max-w-5xl text-center"><Brand light /><p className="section-kicker mt-12">Welcome to Stonehaven</p><h1 className="display-title mt-4 text-4xl sm:text-5xl">Choose your investment focus, {user?.name?.split(" ")[0]}.</h1><p className="mt-4 text-sm text-white/50">Your dashboard will open inside this ecosystem. You can change modes at any time.</p><div className="mt-9 grid gap-4 md:grid-cols-3">{[["crypto", "Digital Assets", "Explore approved crypto markets and structured plans.", TrendingUp], ["stock", "Global Equities", "Research established companies and equity plans.", BarChart3], ["flash", "Flash Plans", "Access short-horizon opportunities with fixed maturity.", Flame]].map(([value, title, text, Icon]) => <button key={value} onClick={() => setChoice(value)} className={`dark-glass relative p-7 text-left transition ${choice === value ? "border-gold bg-gold/10" : "hover:border-gold/50"}`}><Icon className="text-gold" size={28} /><h2 className="display-title mt-7 text-2xl">{title}</h2><p className="mt-3 text-sm leading-6 text-white/50">{text}</p>{choice === value && <CheckCircle2 className="absolute right-5 top-5 text-gold" size={20} />}</button>)}</div><button disabled={!choice} onClick={continueToDashboard} className="btn-primary mt-8 px-9">Enter your dashboard <ArrowRight size={16} /></button></div></div>
   );
 }

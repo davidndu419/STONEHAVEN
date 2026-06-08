@@ -1,6 +1,8 @@
-import { deleteApp, initializeApp } from "firebase/app";
-import { createUserWithEmailAndPassword, getAuth, signOut } from "firebase/auth";
+import { initializeApp } from "firebase/app";
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "firebase/app-check";
+import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getFunctions } from "firebase/functions";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -13,18 +15,17 @@ const firebaseConfig = {
 
 export const firebaseEnabled = Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
 const app = firebaseEnabled ? initializeApp(firebaseConfig) : null;
+
+if (app && import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY && typeof window !== "undefined") {
+  if (import.meta.env.VITE_FIREBASE_APPCHECK_DEBUG_TOKEN) {
+    self.FIREBASE_APPCHECK_DEBUG_TOKEN = import.meta.env.VITE_FIREBASE_APPCHECK_DEBUG_TOKEN;
+  }
+  initializeAppCheck(app, {
+    provider: new ReCaptchaEnterpriseProvider(import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY),
+    isTokenAutoRefreshEnabled: true,
+  });
+}
+
 export const auth = app ? getAuth(app) : null;
 export const db = app ? getFirestore(app) : null;
-
-export async function createManagedAuthUser(email, password) {
-  if (!firebaseEnabled) return `admin-${Date.now()}`;
-  const secondary = initializeApp(firebaseConfig, `managed-user-${Date.now()}`);
-  try {
-    const secondaryAuth = getAuth(secondary);
-    const credential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
-    await signOut(secondaryAuth);
-    return credential.user.uid;
-  } finally {
-    await deleteApp(secondary);
-  }
-}
+export const functions = app ? getFunctions(app, "us-central1") : null;

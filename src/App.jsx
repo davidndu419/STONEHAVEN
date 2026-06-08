@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import LandingPage from "./pages/LandingPage";
 import { ForgotPasswordPage, LoginPage, OnboardingPage, RegisterPage } from "./pages/AuthPages";
-import { DepositPage, ReferralsPage, SettingsPage, TransactionsPage, UserDashboard, WithdrawalPage } from "./pages/UserPages";
-import { CryptoInvestmentPage, EarningsPage, FlashInvestmentPage, PortfolioPage, StockInvestmentPage, StockResearchPage } from "./pages/InvestmentPages";
+import { DepositPage, ReferralWithdrawalPage, ReferralsPage, SettingsPage, TransactionsPage, WithdrawalPage } from "./pages/UserPages";
+import { FundInvestmentPage } from "./pages/FundingPages";
+import { CryptoInvestmentPage, EarningsPage, FlashInvestmentPage, InvestmentsPage, PortfolioPage, StockInvestmentPage, StockResearchPage } from "./pages/InvestmentPages";
 import { AdminInvestmentsPage, CoinLibraryPage, FlashAdminPage, StockLibraryPage } from "./pages/AdminInvestmentPages";
 import { CompanyPage, KycPage, NotificationsPage, SupportPage } from "./pages/EnterpriseUserPages";
 import {
@@ -16,6 +17,7 @@ import {
 } from "./pages/AdminPages";
 import ProtectedRoute from "./components/ProtectedRoute";
 import DashboardLayout from "./components/DashboardLayout";
+import DashboardHome from "./components/DashboardHome";
 import { Brand } from "./components/UI";
 import { dataService } from "./lib/dataService";
 
@@ -52,16 +54,19 @@ export default function App() {
       <Route element={<ProtectedRoute roles={["user"]} />}>
         <Route path="/onboarding" element={<OnboardingPage />} />
         <Route path="/dashboard" element={<DashboardLayout />}>
-          <Route index element={<UserDashboard />} />
+          <Route index element={<DashboardHome />} />
+          <Route path="investments" element={<InvestmentsPage />} />
           <Route path="flash-investment" element={<FlashInvestmentPage />} />
           <Route path="crypto-investment" element={<CryptoInvestmentPage />} />
           <Route path="stock-investment" element={<StockInvestmentPage />} />
           <Route path="stock-investment/:stockId" element={<StockResearchPage />} />
           <Route path="portfolio" element={<PortfolioPage />} />
           <Route path="earnings" element={<EarningsPage />} />
+          <Route path="fund-investment" element={<FundInvestmentPage />} />
           <Route path="deposit" element={<DepositPage />} />
           <Route path="withdraw" element={<WithdrawalPage />} />
           <Route path="referrals" element={<ReferralsPage />} />
+          <Route path="referral-withdrawal" element={<ReferralWithdrawalPage />} />
           <Route path="transactions" element={<TransactionsPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="kyc" element={<KycPage />} />

@@ -8,19 +8,18 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { Brand } from "./UI";
 import { dataService } from "../lib/dataService";
+import { normalizeInvestmentMode } from "../lib/investmentMode";
 
 const userNav = [
   ["/dashboard", "Dashboard", LayoutDashboard],
-  ["/dashboard/flash-investment", "Flash Investment", Flame],
-  ["/dashboard/crypto-investment", "Crypto Investment", Bitcoin],
-  ["/dashboard/stock-investment", "Stock Investment", LineChart],
-  ["/dashboard/portfolio", "My Portfolio", TrendingUp],
+  ["/dashboard/investments", "Investments", TrendingUp],
+  ["/dashboard/portfolio", "Portfolio", WalletCards],
   ["/dashboard/earnings", "Earnings", BarChart3],
-  ["/dashboard/deposit", "Deposit", ArrowDownToLine],
-  ["/dashboard/withdraw", "Withdraw", ArrowUpFromLine],
-  ["/dashboard/referrals", "Referrals", Users],
+  ["/dashboard/deposit", "Deposit Funds", ArrowDownToLine],
+  ["/dashboard/withdraw", "Withdraw Funds", ArrowUpFromLine],
   ["/dashboard/transactions", "Transactions", History],
   ["/dashboard/notifications", "Notifications", Bell],
+  ["/dashboard/referrals", "Referral Earnings", Users],
   ["/dashboard/kyc", "KYC Verification", ShieldCheck],
   ["/dashboard/support", "Support", LifeBuoy],
   ["/dashboard/settings", "Settings", Settings],
@@ -51,16 +50,25 @@ export default function DashboardLayout({ admin = false, superAdmin = false }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
-  const [activeAssetMode, setActiveAssetMode] = useState(() => localStorage.getItem("stonehaven-asset-mode") || user?.preference || "crypto");
+  const [activeInvestmentMode, setActiveInvestmentModeState] = useState(() =>
+    normalizeInvestmentMode(localStorage.getItem("stonehaven-investment-mode") || user?.preference),
+  );
   const base = superAdmin ? "/superadmin" : "/admin";
   const adminItems = superAdmin
     ? [...adminNav, ["onboarding-links", "Onboarding links", Link2], ["testimonials", "Testimonials", Sparkles], ["company", "Company info", Building2], ["content", "Content management", FileText], ["branding", "Platform branding", Image], ["platform-settings", "Platform settings", Settings]]
     : adminNav;
   const navigation = admin ? adminItems.map(([path, label, Icon]) => [`${base}/${path}`, label, Icon]) : userNav;
 
-  useEffect(() => {
-    localStorage.setItem("stonehaven-asset-mode", activeAssetMode);
-  }, [activeAssetMode]);
+  function setActiveInvestmentMode(value) {
+    const mode = normalizeInvestmentMode(value);
+    setActiveInvestmentModeState(mode);
+    localStorage.setItem("stonehaven-investment-mode", mode);
+    if (!admin && user?.userId && user.preference !== mode) {
+      dataService.updateUser(user.userId, { preference: mode }).catch((error) => {
+        console.error("Unable to save investment preference:", error);
+      });
+    }
+  }
 
   useEffect(() => {
     if (admin) return;
@@ -113,12 +121,6 @@ export default function DashboardLayout({ admin = false, superAdmin = false }) {
         <header className="sticky top-0 z-40 flex h-20 items-center justify-between border-b border-slate-200/70 bg-stone/90 px-4 backdrop-blur-xl md:px-7">
           <div className="flex items-center gap-3">
             <button onClick={() => setMobileOpen(true)} className="rounded-xl border border-slate-200 bg-white p-2.5 lg:hidden"><Menu size={20} /></button>
-            {!admin && (
-              <div className="hidden rounded-xl border border-slate-200 bg-white p-1 sm:flex">
-                <button onClick={() => setActiveAssetMode("crypto")} className={`rounded-lg px-4 py-2 text-xs font-semibold transition ${activeAssetMode === "crypto" ? "bg-navy text-white" : "text-slate-500 hover:text-navy"}`}>Crypto</button>
-                <button onClick={() => setActiveAssetMode("stocks")} className={`rounded-lg px-4 py-2 text-xs font-semibold transition ${activeAssetMode === "stocks" ? "bg-navy text-white" : "text-slate-500 hover:text-navy"}`}>Stocks</button>
-              </div>
-            )}
             {admin && <span className="text-xs font-bold uppercase tracking-[.18em] text-slate-400">{superAdmin ? "Super Admin Portal" : "Advisor Portal"}</span>}
           </div>
           <div className="flex items-center gap-2">
@@ -141,7 +143,7 @@ export default function DashboardLayout({ admin = false, superAdmin = false }) {
             </div>
           </div>
         </header>
-        <main className="p-4 pb-24 md:p-7 lg:pb-7"><Outlet context={{ activeAssetMode, setActiveAssetMode }} /></main>
+        <main className="p-4 pb-24 md:p-6 lg:pb-7"><Outlet context={{ activeInvestmentMode, setActiveInvestmentMode }} /></main>
       </div>
       {!admin && (
         <nav className="fixed inset-x-3 bottom-3 z-40 flex justify-around rounded-2xl border border-white/10 bg-navy/95 p-2 shadow-heritage backdrop-blur-xl lg:hidden">

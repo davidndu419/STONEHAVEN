@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Clock3, DollarSign, TrendingUp } from "lucide-react";
 import { calculatePlan } from "../lib/investmentEngine";
+import { calculateLiveLockedBalance, formatInvestmentTime } from "../lib/lockedBalance";
 import { StatusBadge } from "./UI";
 
 export const money = (value = 0) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
@@ -46,15 +47,79 @@ export function FlashCalculator({ tiers, durationHours, selectedTier, onTierChan
 }
 
 export function InvestmentCard({ investment, onDeposit, onDetails }) {
-  const progress = Math.min(100, ((investment.completedWeeks || 0) / (investment.totalWeeks || 1)) * 100);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const metrics = calculateLiveLockedBalance(investment, now);
+  const progress = metrics.progressPercent;
   const flash = investment.type === "flash";
-  const canDeposit = ["pending", "active", "paused"].includes(investment.status) && (!flash || investment.status === "pending");
+  const awaitingFunding = investment.status === "awaiting_funding";
+  const canDeposit = ["awaiting_funding", "pending", "active", "paused"].includes(investment.status) && (!flash || ["awaiting_funding", "pending"].includes(investment.status));
   return (
     <div className="glass-card p-6">
       <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-widest text-gold">{investment.type} investment</p><h3 className="display-title mt-2 text-2xl text-navy">{investment.planName}</h3><p className="mt-1 text-xs text-slate-400">{investment.ticker} · {flash ? money(investment.capital) : `${money(investment.weeklyCapital)} weekly`}</p></div><StatusBadge status={investment.status} /></div>
       <div className="mt-6"><div className="flex justify-between text-xs"><span className="text-slate-400">{flash ? "Maturity progress" : `Weeks ${investment.completedWeeks || 0} of ${investment.totalWeeks}`}</span><span className="font-bold text-navy">{Math.round(progress)}%</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-gold transition-all" style={{ width: `${progress}%` }} /></div></div>
-      <div className="mt-5 grid grid-cols-2 gap-3"><div className="rounded-xl bg-stone p-4"><DollarSign size={15} className="text-gold" /><p className="mt-2 text-[9px] uppercase tracking-wider text-slate-400">Projected return</p><p className="mt-1 font-display text-xl font-bold text-navy">{money(investment.projectedReturn)}</p></div><div className="rounded-xl bg-stone p-4"><Clock3 size={15} className="text-gold" /><p className="mt-2 text-[9px] uppercase tracking-wider text-slate-400">{flash ? "Matures in" : "Next deposit"}</p><p className="mt-1 text-sm font-bold text-navy">{investment.maturityAt || investment.nextDueAt ? <Countdown target={flash ? investment.maturityAt : investment.nextDueAt} /> : "After approval"}</p></div></div>
-      <div className="mt-5 flex gap-2">{canDeposit && <button onClick={() => onDeposit?.(investment)} className="btn-primary flex-1">Make deposit <ArrowRight size={15} /></button>}<button onClick={() => onDetails?.(investment)} className="btn-secondary flex-1 bg-white text-navy">View details</button></div>
+      <div className="mt-5 grid grid-cols-2 gap-3"><div className="rounded-xl bg-stone p-4"><DollarSign size={15} className="text-gold" /><p className="mt-2 text-[9px] uppercase tracking-wider text-slate-400">Current locked earnings</p><p className="mt-1 font-display text-xl font-bold text-navy">{money(metrics.lockedEarned)}</p></div><div className="rounded-xl bg-stone p-4"><Clock3 size={15} className="text-gold" /><p className="mt-2 text-[9px] uppercase tracking-wider text-slate-400">Time remaining</p><p className="mt-1 text-sm font-bold text-navy">{formatInvestmentTime(metrics.remainingSeconds)}</p></div></div>
+      {!flash && <div className="mt-3 grid grid-cols-2 gap-3 rounded-xl border border-slate-100 bg-white p-3 text-xs"><div><p className="text-slate-400">Current week</p><p className="mt-1 font-bold text-navy">{investment.currentWeek || investment.completedWeeks || 0} of {investment.totalWeeks}</p></div><div><p className="text-slate-400">Next deposit due</p><p className="mt-1 font-bold text-navy">{investment.nextDueAt ? new Date(investment.nextDueAt).toLocaleDateString() : "After approval"}</p></div></div>}
+      {(investment.status === "paused" || metrics.isPaymentOverdue) && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-800">Earnings are paused until the overdue weekly funding is approved.</p>}
+      <div className="mt-5 flex gap-2">{canDeposit && <button onClick={() => onDeposit?.(investment)} className="btn-primary flex-1">{awaitingFunding ? "Fund Investment" : "Make deposit"} <ArrowRight size={15} /></button>}<button onClick={() => onDetails?.(investment)} className="btn-secondary flex-1 bg-white text-navy">View details</button></div>
+    </div>
+  );
+}
+
+export function InvestmentDetail({ investment }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const metrics = calculateLiveLockedBalance(investment, now);
+  const paused = investment.status === "paused" || metrics.isPaymentOverdue;
+  return (
+    <div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-xl bg-navy p-4 text-white">
+          <p className="text-[9px] uppercase tracking-widest text-white/40">Live locked earnings</p>
+          <p className="mt-2 font-display text-2xl font-bold text-gold">{money(metrics.lockedEarned)}</p>
+        </div>
+        <div className="rounded-xl bg-stone p-4">
+          <p className="text-[9px] uppercase tracking-widest text-slate-400">Projected return</p>
+          <p className="mt-2 font-display text-2xl font-bold text-navy">{money(investment.projectedReturn)}</p>
+        </div>
+        <div className="rounded-xl bg-stone p-4">
+          <p className="text-[9px] uppercase tracking-widest text-slate-400">Capital contributed</p>
+          <p className="mt-2 font-display text-xl font-bold text-navy">{money(investment.capitalAmount || 0)}</p>
+        </div>
+        <div className="rounded-xl bg-stone p-4">
+          <p className="text-[9px] uppercase tracking-widest text-slate-400">Remaining time</p>
+          <p className="mt-2 text-sm font-bold text-navy">{formatInvestmentTime(metrics.remainingSeconds)}</p>
+        </div>
+      </div>
+      <div className="mt-5">
+        <div className="flex justify-between text-xs">
+          <span className="text-slate-400">Active progress</span>
+          <strong>{metrics.progressPercent.toFixed(1)}%</strong>
+        </div>
+        <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+          <div className="h-full rounded-full bg-gold" style={{ width: `${metrics.progressPercent}%` }} />
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-slate-500">
+          <p>Active elapsed: <strong className="text-navy">{formatInvestmentTime(metrics.activeElapsedSeconds)}</strong></p>
+          <p>Status: <strong className="capitalize text-navy">{investment.status}</strong></p>
+          <p>Maturity: <strong className="text-navy">{investment.maturityAt ? new Date(investment.maturityAt).toLocaleDateString() : "After activation"}</strong></p>
+          {investment.type !== "flash" && <p>Week: <strong className="text-navy">{investment.currentWeek || investment.completedWeeks || 0}/{investment.totalWeeks}</strong></p>}
+        </div>
+      </div>
+      {paused && (
+        <p className="mt-4 rounded-xl bg-amber-50 p-3 text-xs text-amber-800">
+          This plan is paused. Locked earnings remain frozen until the overdue weekly deposit is approved.
+        </p>
+      )}
+      <div className="mt-6 border-t border-slate-200 pt-5">
+        <Timeline investment={investment} />
+      </div>
     </div>
   );
 }

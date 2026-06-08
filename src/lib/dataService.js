@@ -11,7 +11,8 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { db, firebaseEnabled } from "./firebase";
+import { db, firebaseEnabled, auth } from "./firebase";
+import { assertRecoveryAllowed, buildRecoveredUserProfile } from "./recoveryProfile";
 import {
   seedCoins, seedDeposits, seedFlashSettings, seedFlashTiers, seedInvestments, seedMethods,
   seedNotifications, seedStocks, seedTransactions, seedUsers, seedWithdrawals,
@@ -20,6 +21,7 @@ import {
 } from "../data/demo";
 
 const KEY = "stonehaven-demo-db-v1";
+const LEGACY_DEMO_PASSWORD_HASH = "d3ad9315b7be5dd53b31a273b3b3aba5defe700808305aa16a3062b76658a791";
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
 function initializeLocal() {
@@ -55,6 +57,16 @@ function initializeLocal() {
         changed = true;
       }
     });
+    current.users = current.users.map((user) => {
+      if (!Object.hasOwn(user, "password")) return user;
+      changed = true;
+      const safeUser = { ...user };
+      delete safeUser.password;
+      return {
+        ...safeUser,
+        passwordHash: safeUser.passwordHash || LEGACY_DEMO_PASSWORD_HASH,
+      };
+    });
     if (changed) localStorage.setItem(KEY, JSON.stringify(current));
     return current;
   }
@@ -73,19 +85,84 @@ function writeLocal(data) {
 const id = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 const now = () => new Date().toISOString();
 const serializable = (data) => ({ ...data, createdAt: data.createdAt || now() });
+const cleanPayload = (obj) => {
+  if (!obj || typeof obj !== "object") return obj;
+  const clean = {};
+  Object.keys(obj).forEach((key) => {
+    if (obj[key] !== undefined) {
+      clean[key] = obj[key];
+    }
+  });
+  return clean;
+};
+const normalizeTimestamps = (obj) => {
+  if (!obj || typeof obj !== "object") return obj;
+  const out = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value && typeof value === "object" && typeof value.toDate === "function") {
+      out[key] = value.toDate().toISOString();
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+};
 
 async function listFirebase(name, filters = []) {
-  const ref = collection(db, name);
-  const q = filters.length ? query(ref, ...filters.map(([field, value]) => where(field, "==", value))) : ref;
-  const result = await getDocs(q);
-  return result.docs.map((item) => ({ id: item.id, ...item.data() }));
+  try {
+    const ref = collection(db, name);
+    const q = filters.length ? query(ref, ...filters.map(([field, value]) => where(field, "==", value))) : ref;
+    const result = await getDocs(q);
+    return result.docs.map((item) => normalizeTimestamps({ id: item.id, ...item.data() }));
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.error(`[Firestore Dev Log] Query failed on collection "${name}" with filters:`, JSON.stringify(filters), error);
+    }
+    throw error;
+  }
 }
 
 export const dataService = {
+  async bootstrapAuthProfile(firebaseUser) {
+    if (!firebaseEnabled) return null;
+    const controlSnap = await getDoc(doc(db, "accountControls", firebaseUser.uid));
+    assertRecoveryAllowed(controlSnap.exists() ? controlSnap.data() : null);
+    const timestamp = serverTimestamp();
+    const profile = buildRecoveredUserProfile({
+      uid: firebaseUser.uid,
+      email: firebaseUser.email,
+      name: firebaseUser.displayName,
+      timestamp,
+    });
+    await setDoc(doc(db, "users", firebaseUser.uid), profile);
+    return { ...profile, createdAt: new Date().toISOString(), lastLogin: new Date().toISOString() };
+  },
+
+  async provisionPublicProfile(firebaseUser, form) {
+    await this.bootstrapAuthProfile(firebaseUser);
+    await this.updateUser(firebaseUser.uid, {
+      name: String(form.name || "").trim().slice(0, 120),
+      phone: String(form.phone || "").trim().slice(0, 40),
+      country: String(form.country || "").trim().slice(0, 80),
+    });
+    return this.getUser(firebaseUser.uid);
+  },
+
   async getUser(userId) {
     if (firebaseEnabled) {
-      const snap = await getDoc(doc(db, "users", userId));
-      return snap.exists() ? { userId: snap.id, ...snap.data() } : null;
+      let targetUid = userId;
+      if (auth.currentUser) {
+        try {
+          const token = await auth.currentUser.getIdTokenResult();
+          if (token.claims.role === "user" || !token.claims.role) {
+            targetUid = auth.currentUser.uid;
+          }
+        } catch {
+          targetUid = auth.currentUser.uid;
+        }
+      }
+      const snap = await getDoc(doc(db, "users", targetUid));
+      return snap.exists() ? normalizeTimestamps({ userId: snap.id, ...snap.data() }) : null;
     }
     return readLocal().users.find((user) => user.userId === userId) || null;
   },
@@ -99,8 +176,9 @@ export const dataService = {
   },
 
   async saveUser(user) {
+    const cleanUser = cleanPayload(user);
     if (firebaseEnabled) {
-      await setDoc(doc(db, "users", user.userId), { ...user, createdAt: serverTimestamp(), lastLogin: serverTimestamp() });
+      await setDoc(doc(db, "users", user.userId), { ...cleanUser, createdAt: serverTimestamp(), lastLogin: serverTimestamp() });
       return user;
     }
     const data = readLocal();
@@ -112,8 +190,9 @@ export const dataService = {
   },
 
   async updateUser(userId, changes) {
+    const cleanChanges = cleanPayload(changes);
     if (firebaseEnabled) {
-      await updateDoc(doc(db, "users", userId), changes);
+      await updateDoc(doc(db, "users", userId), cleanChanges);
     } else {
       const data = readLocal();
       data.users = data.users.map((user) => (user.userId === userId ? { ...user, ...changes } : user));
@@ -123,31 +202,105 @@ export const dataService = {
   },
 
   async listUsers(adminId, all = false) {
-    if (firebaseEnabled) return listFirebase("users", all ? [] : [["adminId", adminId]]);
+    if (firebaseEnabled) {
+      let isUser = true;
+      if (auth.currentUser) {
+        try {
+          const token = await auth.currentUser.getIdTokenResult();
+          if (token.claims.role === "superadmin" || token.claims.role === "sub-admin") {
+            isUser = false;
+          }
+        } catch {
+          // ignore
+        }
+      }
+      if (isUser) {
+        if (import.meta.env.DEV) {
+          console.warn("listUsers called by a non-admin user. Returning empty array defensively to prevent crash.");
+        }
+        return [];
+      }
+      return listFirebase("users", all ? [] : [["adminId", adminId]]);
+    }
     return readLocal().users.filter((user) => all || user.adminId === adminId);
   },
 
   async removeUser(userId) {
-    if (firebaseEnabled) await deleteDoc(doc(db, "users", userId));
-    else {
-      const data = readLocal();
-      data.users = data.users.filter((user) => user.userId !== userId);
-      writeLocal(data);
+    if (firebaseEnabled) {
+      throw new Error("Firebase user lifecycle changes are owner-managed. Use the local Admin SDK script.");
     }
+    return this.updateUser(userId, {
+      status: "deleted",
+      disabledAt: now(),
+      disabledBy: "local-demo",
+      disabledReason: "Soft deleted in local demo mode",
+    });
   },
 
   async list(name, adminId, all = false) {
-    if (firebaseEnabled) return listFirebase(name, all ? [] : [["adminId", adminId]]);
-    return (readLocal()[name] || []).filter((item) => all || item.adminId === adminId);
+    if (firebaseEnabled) {
+      const filters = [];
+      if (!all) {
+        filters.push(["adminId", adminId]);
+      }
+      
+      let isUser = true;
+      if (auth.currentUser) {
+        try {
+          const token = await auth.currentUser.getIdTokenResult();
+          if (token.claims.role === "superadmin" || token.claims.role === "sub-admin") {
+            isUser = false;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (isUser) {
+        if (["coins", "stocks", "flashSettings", "flashTiers", "flashPlans", "depositMethods"].includes(name)) {
+          filters.push(["active", true]);
+        }
+        if (name === "announcements") {
+          filters.push(["status", "published"]);
+        }
+      }
+      return listFirebase(name, filters);
+    }
+    
+    let result = readLocal()[name] || [];
+    if (!all) {
+      result = result.filter((item) => item.adminId === adminId);
+    }
+    if (["coins", "stocks", "flashSettings", "flashTiers", "flashPlans", "depositMethods"].includes(name)) {
+      result = result.filter((item) => item.active === true);
+    }
+    if (name === "announcements") {
+      result = result.filter((item) => item.status === "published");
+    }
+    return result;
   },
 
   async listForUser(name, userId) {
-    if (firebaseEnabled) return listFirebase(name, [["userId", userId]]);
+    if (firebaseEnabled) {
+      let targetUid = userId;
+      if (auth.currentUser) {
+        try {
+          const token = await auth.currentUser.getIdTokenResult();
+          if (token.claims.role === "user" || !token.claims.role) {
+            targetUid = auth.currentUser.uid;
+          }
+        } catch {
+          targetUid = auth.currentUser.uid;
+        }
+      }
+      return listFirebase(name, [["userId", targetUid]]);
+    }
     return (readLocal()[name] || []).filter((item) => item.userId === userId);
   },
 
   async create(name, payload) {
-    const item = serializable(payload);
+    const clean = cleanPayload(payload);
+    const item = serializable(clean);
     if (firebaseEnabled) {
       const result = await addDoc(collection(db, name), { ...item, createdAt: serverTimestamp() });
       return { id: result.id, ...item };
@@ -160,7 +313,8 @@ export const dataService = {
   },
 
   async update(name, itemId, changes) {
-    if (firebaseEnabled) await updateDoc(doc(db, name, itemId), changes);
+    const cleanChanges = cleanPayload(changes);
+    if (firebaseEnabled) await updateDoc(doc(db, name, itemId), cleanChanges);
     else {
       const data = readLocal();
       data[name] = (data[name] || []).map((item) => (item.id === itemId ? { ...item, ...changes } : item));

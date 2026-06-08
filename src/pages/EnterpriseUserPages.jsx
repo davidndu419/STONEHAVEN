@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { dataService } from "../lib/dataService";
 import { uploadToCloudinary } from "../lib/cloudinary";
 import { ticketId } from "../lib/enterprise";
+import { submitKyc } from "../lib/securityApi";
 import { EmptyState, Modal, PageHeader, StatusBadge } from "../components/UI";
 
 const dateTime = (value) => value ? new Date(value).toLocaleString() : "";
@@ -20,6 +21,10 @@ export function KycPage() {
   useEffect(() => { dataService.listForUser("kycSubmissions", user.userId).then((items) => setExisting(items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0] || null)); }, [user.userId]);
 
   async function submit() {
+    if (!form.idFront || !form.idBack || !form.selfie || !form.proofOfAddress) {
+      window.alert("Please upload all four required KYC documents.");
+      return;
+    }
     setBusy(true);
     try {
       const [idFront, idBack, selfie, proofOfAddress] = await Promise.all([
@@ -32,10 +37,7 @@ export function KycPage() {
         address: form.address, idType: form.idType, documents: { idFront, idBack, selfie, proofOfAddress },
         status: "pending", rejectionReason: "", requestDetails: "",
       };
-      if (existing?.status === "rejected") await dataService.update("kycSubmissions", existing.id, { ...payload, resubmittedAt: new Date().toISOString() });
-      else await dataService.create("kycSubmissions", payload);
-      await dataService.updateUser(user.userId, { kycStatus: "pending" });
-      await dataService.log({ userId: user.userId, adminId: user.adminId, type: "kyc_submitted", label: "KYC verification submitted", amount: 0, status: "pending" });
+      await submitKyc(payload);
       await refresh();
       setExisting({ ...payload, status: "pending" });
     } finally { setBusy(false); }
@@ -44,7 +46,7 @@ export function KycPage() {
   if (user.kycStatus === "verified") return <div><PageHeader eyebrow="Identity verification" title="KYC verification" /><div className="glass-card mx-auto max-w-xl p-10 text-center"><ShieldCheck className="mx-auto text-forest" size={52} /><h2 className="display-title mt-5 text-3xl text-navy">Identity verified</h2><p className="mt-3 text-sm text-slate-500">Your Stonehaven profile has full withdrawal access.</p></div></div>;
   if (user.kycStatus === "pending" || existing?.status === "pending") return <div><PageHeader eyebrow="Identity verification" title="KYC verification" /><div className="glass-card mx-auto max-w-xl p-10 text-center"><FileText className="mx-auto text-gold" size={48} /><h2 className="display-title mt-5 text-3xl text-navy">Under review</h2><p className="mt-3 text-sm leading-6 text-slate-500">Your documents are in the compliance review queue. You will receive a notification when a decision is recorded.</p></div></div>;
 
-  const fileField = (key, label) => <label className="block cursor-pointer rounded-xl border-2 border-dashed border-slate-200 p-5 text-center hover:border-gold"><Upload className="mx-auto text-gold" /><span className="mt-2 block text-sm font-bold text-navy">{form[key]?.name || label}</span><input hidden type="file" accept="image/*,.pdf" required onChange={(event) => setForm({ ...form, [key]: event.target.files[0] })} /></label>;
+  const fileField = (key, label) => <label className="block cursor-pointer rounded-xl border-2 border-dashed border-slate-200 p-5 text-center hover:border-gold"><Upload className="mx-auto text-gold" /><span className="mt-2 block text-sm font-bold text-navy">{form[key]?.name || label}</span><input hidden type="file" accept="image/*,.pdf" onChange={(event) => setForm({ ...form, [key]: event.target.files[0] })} /></label>;
   return <div><PageHeader eyebrow="Identity verification" title="Complete your KYC" description="Secure identity review unlocks full withdrawal access and protects your account." />{(user.kycStatus === "rejected" || existing?.status === "rejected") && <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700"><strong>Previous submission rejected:</strong> {existing?.rejectionReason || "Please review and resubmit your documents."}</div>}<div className="mb-6 grid grid-cols-4 gap-2">{["Personal", "Identity", "Address", "Submit"].map((label, index) => <div key={label} className={`rounded-xl px-3 py-3 text-center text-xs font-bold ${step >= index + 1 ? "bg-navy text-white" : "bg-white text-slate-400"}`}>{index + 1}. {label}</div>)}</div><div className="glass-card p-6 md:p-8">{step === 1 && <div className="grid gap-5 sm:grid-cols-2"><div className="sm:col-span-2"><label className="label">Full legal name</label><input className="field" value={form.legalName} onChange={(e) => setForm({ ...form, legalName: e.target.value })} /></div><div><label className="label">Date of birth</label><input className="field" type="date" value={form.dateOfBirth} onChange={(e) => setForm({ ...form, dateOfBirth: e.target.value })} /></div><div><label className="label">Nationality</label><input className="field" value={form.nationality} onChange={(e) => setForm({ ...form, nationality: e.target.value })} /></div><div className="sm:col-span-2"><label className="label">Residential address</label><textarea className="field min-h-24" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div></div>}{step === 2 && <div><label className="label">ID type</label><select className="field mb-5" value={form.idType} onChange={(e) => setForm({ ...form, idType: e.target.value })}><option>Passport</option><option>National ID</option><option>Driver's License</option></select><div className="grid gap-4 sm:grid-cols-3">{fileField("idFront", "Front of ID")}{fileField("idBack", "Back of ID")}{fileField("selfie", "Selfie holding ID")}</div></div>}{step === 3 && <div><h2 className="display-title text-2xl text-navy">Proof of address</h2><p className="mt-2 text-sm text-slate-500">Upload a utility bill or bank statement issued within the last three months.</p><div className="mt-6">{fileField("proofOfAddress", "Upload proof of address")}</div></div>}{step === 4 && <div><h2 className="display-title text-2xl text-navy">Review and submit</h2><div className="mt-5 grid gap-3 rounded-xl bg-stone p-5 text-sm sm:grid-cols-2"><p><span className="text-slate-400">Legal name:</span><br /><strong>{form.legalName}</strong></p><p><span className="text-slate-400">Nationality:</span><br /><strong>{form.nationality}</strong></p><p><span className="text-slate-400">ID type:</span><br /><strong>{form.idType}</strong></p><p><span className="text-slate-400">Documents:</span><br /><strong>4 selected</strong></p></div></div>}<div className="mt-8 flex justify-between"><button disabled={step === 1} onClick={() => setStep(step - 1)} className="btn-secondary text-navy disabled:opacity-30">Back</button>{step < 4 ? <button onClick={() => setStep(step + 1)} className="btn-primary">Continue <ChevronRight size={16} /></button> : <button disabled={busy} onClick={submit} className="btn-primary">{busy ? "Uploading securely..." : "Submit for review"}</button>}</div></div></div>;
 }
 
