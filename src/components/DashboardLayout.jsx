@@ -253,9 +253,7 @@ export default function DashboardLayout({ admin = false, superAdmin = false }) {
                 <span className="hidden text-left sm:block"><span className="block text-xs font-bold text-navy">{user?.name}</span><span className="block text-[10px] capitalize text-slate-400">{user?.role}</span></span>
               </button>
               {profileOpen && (
-                <div className="absolute right-0 mt-2 w-52 rounded-xl border border-slate-200 bg-white p-2 shadow-heritage">
-                  <button onClick={() => { navigate(admin ? `${base}/dashboard` : "/dashboard/settings"); setProfileOpen(false); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-stone"><Settings size={16} /> Settings</button>
-                  <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-stone"><ShieldCheck size={16} /> Security</button>
+                <div className="absolute right-0 mt-2 w-36 rounded-xl border border-slate-200 bg-white p-1.5 shadow-heritage">
                   <button onClick={signOutUser} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-burgundy hover:bg-red-50"><LogOut size={16} /> Sign out</button>
                 </div>
               )}
