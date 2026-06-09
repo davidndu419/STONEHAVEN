@@ -62,13 +62,46 @@ export function InvestmentCard({ investment, onDeposit, onDetails }) {
   const awaitingFunding = investment.status === "awaiting_funding";
   const canDeposit = ["awaiting_funding", "pending", "active", "paused"].includes(investment.status) && (!flash || ["awaiting_funding", "pending"].includes(investment.status));
   return (
-    <div className="glass-card p-6">
-      <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-widest text-gold">{investment.type} investment</p><h3 className="display-title mt-2 text-2xl text-navy">{investment.planName}</h3><p className="mt-1 text-xs text-slate-400">{investment.ticker} · {flash ? money(investment.capital) : `${money(investment.weeklyCapital)} weekly`}</p></div><StatusBadge status={investment.status} /></div>
+    <div className="glass-card p-4 sm:p-6">
+      <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-widest text-gold">{investment.type} investment</p><h3 className="display-title mt-2 text-xl sm:text-2xl text-navy">{investment.planName}</h3><p className="mt-1 text-xs text-slate-400">{investment.ticker} · {flash ? money(investment.capital) : `${money(investment.weeklyCapital)} weekly`}</p></div><StatusBadge status={investment.status} /></div>
       <div className="mt-6"><div className="flex justify-between text-xs"><span className="text-slate-400">{flash ? "Maturity progress" : `Weeks ${investment.completedWeeks || 0} of ${investment.totalWeeks}`}</span><span className="font-bold text-navy">{Math.round(progress)}%</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-gold transition-all" style={{ width: `${progress}%` }} /></div></div>
-      <div className="mt-5 grid grid-cols-2 gap-3"><div className="rounded-xl bg-stone p-4"><DollarSign size={15} className="text-gold" /><p className="mt-2 text-[9px] uppercase tracking-wider text-slate-400">Current locked earnings</p><p className="mt-1 font-display text-xl font-bold text-navy">{money(metrics.lockedEarned)}</p></div><div className="rounded-xl bg-stone p-4"><Clock3 size={15} className="text-gold" /><p className="mt-2 text-[9px] uppercase tracking-wider text-slate-400">Time remaining</p><p className="mt-1 text-sm font-bold text-navy">{formatInvestmentTime(metrics.remainingSeconds)}</p></div></div>
-      {!flash && <div className="mt-3 grid grid-cols-2 gap-3 rounded-xl border border-slate-100 bg-white p-3 text-xs"><div><p className="text-slate-400">Current week</p><p className="mt-1 font-bold text-navy">{investment.currentWeek || investment.completedWeeks || 0} of {investment.totalWeeks}</p></div><div><p className="text-slate-400">Next deposit due</p><p className="mt-1 font-bold text-navy">{investment.nextDueAt ? new Date(investment.nextDueAt).toLocaleDateString() : "After approval"}</p></div></div>}
-      {(investment.status === "paused" || metrics.isPaymentOverdue) && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-800">Earnings are paused until the overdue weekly funding is approved.</p>}
-      <div className="mt-5 flex gap-2">{canDeposit && <button onClick={() => onDeposit?.(investment)} className="btn-primary flex-1">{awaitingFunding ? "Fund Investment" : "Make deposit"} <ArrowRight size={15} /></button>}<button onClick={() => onDetails?.(investment)} className="btn-secondary flex-1 bg-white text-navy">View details</button></div>
+      <div className="mt-5 grid grid-cols-2 gap-2 sm:gap-3">
+        <div className="rounded-xl bg-stone p-3 sm:p-4">
+          <DollarSign size={14} className="text-gold" />
+          <p className="mt-2 text-[9px] uppercase tracking-wider text-slate-400">Locked earnings</p>
+          <p className="mt-1 font-display text-base sm:text-xl font-bold text-navy truncate" title={money(metrics.lockedEarned)}>{money(metrics.lockedEarned)}</p>
+        </div>
+        <div className="rounded-xl bg-stone p-3 sm:p-4">
+          <Clock3 size={14} className="text-gold" />
+          <p className="mt-2 text-[9px] uppercase tracking-wider text-slate-400">Time remaining</p>
+          <p className="mt-1 text-xs sm:text-sm font-bold text-navy truncate" title={formatInvestmentTime(metrics.remainingSeconds)}>{formatInvestmentTime(metrics.remainingSeconds)}</p>
+        </div>
+      </div>
+      {!flash && (
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3 rounded-xl border border-slate-100 bg-white p-2.5 sm:p-3 text-[11px] sm:text-xs">
+          <div>
+            <p className="text-slate-400">Current week</p>
+            <p className="mt-1 font-bold text-navy">{investment.currentWeek || investment.completedWeeks || 0} of {investment.totalWeeks}</p>
+          </div>
+          <div>
+            <p className="text-slate-400">Next deposit due</p>
+            <p className="mt-1 font-bold text-navy truncate" title={investment.nextDueAt ? new Date(investment.nextDueAt).toLocaleDateString() : "After approval"}>
+              {investment.nextDueAt ? new Date(investment.nextDueAt).toLocaleDateString() : "After approval"}
+            </p>
+          </div>
+        </div>
+      )}
+      {(investment.status === "paused" || metrics.isPaymentOverdue) && <p className="mt-3 rounded-xl bg-amber-50 p-2.5 sm:p-3 text-[11px] sm:text-xs font-semibold text-amber-800">Earnings are paused until the overdue weekly funding is approved.</p>}
+      <div className="mt-5 flex flex-col sm:flex-row gap-2">
+        {canDeposit && (
+          <button onClick={() => onDeposit?.(investment)} className="btn-primary w-full sm:flex-1 py-2.5 sm:py-3 text-xs sm:text-sm">
+            {awaitingFunding ? "Fund Investment" : "Make deposit"} <ArrowRight size={14} />
+          </button>
+        )}
+        <button onClick={() => onDetails?.(investment)} className="btn-secondary w-full sm:flex-1 bg-white text-navy py-2.5 sm:py-3 text-xs sm:text-sm">
+          View details
+        </button>
+      </div>
     </div>
   );
 }

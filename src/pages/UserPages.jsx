@@ -372,7 +372,58 @@ export function ReferralsPage() {
       <div className="rounded-2xl bg-navy p-7 text-white shadow-heritage"><p className="text-xs font-bold uppercase tracking-widest text-white/35">Your private invitation link</p><div className="mt-4 flex flex-col gap-3 sm:flex-row"><input readOnly className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[.06] px-4 py-3 text-sm text-gold outline-none" value={link} /><button onClick={copy} className="btn-primary"><Copy size={16} /> {copied ? "Copied" : "Copy link"}</button></div></div>
       <div className="mt-6 grid gap-4 sm:grid-cols-3">{[["Total referred", users.length, Users], ["Active referrals", users.filter((item) => item.status === "active").length, CheckCircle2], ["Available referral balance", money(user.referralBalance), DollarSign]].map(([label, value, Icon]) => <div key={label} className="glass-card p-6"><Icon className="text-gold" /><p className="display-title mt-5 text-3xl text-navy">{value}</p><p className="mt-1 text-xs uppercase tracking-widest text-slate-400">{label}</p></div>)}</div>
       <div className="glass-card mt-6 overflow-hidden"><div className="border-b border-slate-200 p-6"><h2 className="display-title text-2xl text-navy">Referral transactions</h2></div>{transactions.length ? <div className="divide-y divide-slate-100">{transactions.map((item) => <div key={item.id} className="flex items-center justify-between gap-4 p-5"><div><p className="text-sm font-bold text-navy">{item.label}</p><p className="mt-1 text-xs text-slate-400">{dateTime(item.createdAt)}</p></div><div className="text-right"><p className="font-bold text-navy">{money(item.amount)}</p><StatusBadge status={item.status} /></div></div>)}</div> : <p className="p-8 text-center text-sm text-slate-400">Referral earnings and withdrawals will appear here.</p>}</div>
-      <div className="glass-card mt-6 overflow-hidden"><div className="border-b border-slate-200 p-6"><h2 className="display-title text-2xl text-navy">Your introductions</h2></div>{users.length ? <div className="table-scroll overflow-x-auto"><table className="w-full min-w-[600px]"><thead><tr className="bg-stone text-left text-[10px] uppercase tracking-widest text-slate-400"><th className="px-6 py-4">Client</th><th>Status</th><th>Joined</th><th>Bonus status</th></tr></thead><tbody>{users.map((item) => <tr key={item.userId} className="border-t border-slate-100 text-sm"><td className="px-6 py-4 font-bold text-navy">{item.name}</td><td><StatusBadge status={item.status} /></td><td>{date(item.createdAt)}</td><td className="text-slate-400">Activates after Week 1 approval</td></tr>)}</tbody></table></div> : <div className="p-10 text-center text-sm text-slate-400">Share your invitation link to begin building your referral network.</div>}</div>
+      <div className="glass-card mt-6 overflow-hidden">
+        <div className="border-b border-slate-200 p-6">
+          <h2 className="display-title text-2xl text-navy">Your introductions</h2>
+        </div>
+        {users.length ? (
+          <>
+            {/* Desktop Table View */}
+            <div className="table-scroll overflow-x-auto hidden md:block">
+              <table className="w-full min-w-[600px]">
+                <thead>
+                  <tr className="bg-stone text-left text-[10px] uppercase tracking-widest text-slate-400">
+                    <th className="px-6 py-4">Client</th>
+                    <th>Status</th>
+                    <th>Joined</th>
+                    <th>Bonus status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((item) => (
+                    <tr key={item.userId} className="border-t border-slate-100 text-sm">
+                      <td className="px-6 py-4 font-bold text-navy">{item.name}</td>
+                      <td><StatusBadge status={item.status} /></td>
+                      <td>{date(item.createdAt)}</td>
+                      <td className="text-slate-400">Activates after Week 1 approval</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards View */}
+            <div className="divide-y divide-slate-100 md:hidden">
+              {users.map((item) => (
+                <div key={item.userId} className="p-4 flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <p className="font-bold text-navy text-sm">{item.name}</p>
+                    <StatusBadge status={item.status} />
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-slate-500">
+                    <span>Joined: {date(item.createdAt)}</span>
+                    <span className="text-[10px] text-slate-400 bg-stone px-2 py-0.5 rounded font-medium">Activates after Week 1</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="p-10 text-center text-sm text-slate-400">
+            Share your invitation link to begin building your referral network.
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -421,7 +472,80 @@ export function TransactionsPage() {
   }, [user.userId]);
   return (
     <div><PageHeader eyebrow="Audit trail" title="Transaction history" description="A chronological record of every financial event on your account." action={<button onClick={() => window.location.reload()} className="btn-secondary bg-white text-navy"><RefreshCw size={15} /> Refresh</button>} />
-      {loading ? <div className="glass-card grid h-56 place-items-center"><RefreshCw className="animate-spin text-gold" /></div> : items.length ? <div className="glass-card table-scroll overflow-x-auto"><table className="w-full min-w-[700px]"><thead><tr className="bg-navy text-left text-[10px] uppercase tracking-widest text-white/50"><th className="px-6 py-5">Event</th><th>Amount</th><th>Status</th><th>Date & time</th></tr></thead><tbody>{items.map((item) => <tr key={item.id} className="border-b border-slate-100 text-sm last:border-0"><td className="px-6 py-5"><div className="flex items-start gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gold/10 text-gold"><History size={16} /></span><div><p className="font-bold text-navy">{item.label}</p><p className="mt-1 text-[10px] uppercase tracking-wider text-slate-400">{item.type.replaceAll("_", " ")}</p>{item.reason && <p className="mt-2 text-xs leading-5 text-red-600">Reason: {item.reason}</p>}</div></div></td><td className="font-bold text-navy">{money(item.amount)}</td><td><StatusBadge status={item.status} /></td><td className="whitespace-nowrap text-slate-500">{dateTime(item.createdAt)}</td></tr>)}</tbody></table></div> : <EmptyState icon={History} title="No transactions yet" text="Deposits, withdrawals, referral bonuses, and administrative adjustments will be recorded here." />}
+      {loading ? (
+        <div className="glass-card grid h-56 place-items-center"><RefreshCw className="animate-spin text-gold" /></div>
+      ) : items.length ? (
+        <>
+          {/* Desktop Table View */}
+          <div className="glass-card table-scroll overflow-x-auto hidden md:block">
+            <table className="w-full min-w-[700px]">
+              <thead>
+                <tr className="bg-navy text-left text-[10px] uppercase tracking-widest text-white/50">
+                  <th className="px-6 py-5">Event</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th>Date & time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr key={item.id} className="border-b border-slate-100 text-sm last:border-0">
+                    <td className="px-6 py-5">
+                      <div className="flex items-start gap-3">
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gold/10 text-gold">
+                          <History size={16} />
+                        </span>
+                        <div>
+                          <p className="font-bold text-navy">{item.label}</p>
+                          <p className="mt-1 text-[10px] uppercase tracking-wider text-slate-400">{item.type.replaceAll("_", " ")}</p>
+                          {item.reason && <p className="mt-2 text-xs leading-5 text-red-600">Reason: {item.reason}</p>}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="font-bold text-navy">{money(item.amount)}</td>
+                    <td><StatusBadge status={item.status} /></td>
+                    <td className="whitespace-nowrap text-slate-500">{dateTime(item.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile Cards View */}
+          <div className="space-y-4 md:hidden">
+            {items.map((item) => (
+              <div key={item.id} className="glass-card p-4 border border-slate-100 bg-white/70">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex gap-2.5">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-gold/10 text-gold mt-0.5">
+                      <History size={14} />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="font-bold text-navy text-sm break-words leading-tight">{item.label}</p>
+                      <p className="mt-1 text-[9px] uppercase tracking-wider text-slate-400">{item.type.replaceAll("_", " ")}</p>
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="font-bold text-navy text-sm">{money(item.amount)}</p>
+                    <div className="mt-1.5"><StatusBadge status={item.status} /></div>
+                  </div>
+                </div>
+                {item.reason && (
+                  <div className="mt-3 rounded-lg bg-red-50 p-2.5 text-xs text-red-600 border border-red-100 leading-normal">
+                    <strong>Reason:</strong> {item.reason}
+                  </div>
+                )}
+                <div className="mt-3 border-t border-slate-100 pt-2 flex items-center justify-between text-[10px] text-slate-400">
+                  <span>Timestamp</span>
+                  <span>{dateTime(item.createdAt)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <EmptyState icon={History} title="No transactions yet" text="Deposits, withdrawals, referral bonuses, and administrative adjustments will be recorded here."
+      />)}
     </div>
   );
 }

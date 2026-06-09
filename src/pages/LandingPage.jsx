@@ -31,7 +31,7 @@ function SectionTitle({ kicker, title, text, center = false }) {
   return (
     <div className={center ? "mx-auto max-w-2xl text-center" : "max-w-2xl"}>
       <p className="section-kicker">{kicker}</p>
-      <h2 className="display-title mt-3 text-4xl text-navy md:text-5xl">{title}</h2>
+      <h2 className="display-title mt-3 text-3xl sm:text-4xl text-navy md:text-5xl">{title}</h2>
       {text && <p className="mt-4 text-sm leading-7 text-slate-500 md:text-base">{text}</p>}
     </div>
   );
@@ -79,7 +79,17 @@ export default function LandingPage() {
             </div>
             <button onClick={() => setMenuOpen(!menuOpen)} className="text-white lg:hidden">{menuOpen ? <X /> : <Menu />}</button>
           </div>
-          {menuOpen && <div className="border-t border-white/10 py-5 text-white lg:hidden"><div className="flex flex-col gap-4"><a href="#plans">Plans</a><a href="#how">How it works</a><a href="#faq">FAQ</a><Link to="/login">Login</Link><Link to="/register" className="text-gold">Create account</Link></div></div>}
+          {menuOpen && (
+            <div className="border-t border-white/10 py-5 text-white lg:hidden">
+              <div className="flex flex-col gap-4">
+                <a href="#plans" onClick={() => setMenuOpen(false)}>Plans</a>
+                <a href="#how" onClick={() => setMenuOpen(false)}>How it works</a>
+                <a href="#faq" onClick={() => setMenuOpen(false)}>FAQ</a>
+                <Link to="/login" onClick={() => setMenuOpen(false)}>Login</Link>
+                <Link to="/register" className="text-gold" onClick={() => setMenuOpen(false)}>Create account</Link>
+              </div>
+            </div>
+          )}
         </nav>
       </div>
 
@@ -89,7 +99,7 @@ export default function LandingPage() {
             <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-gold/25 bg-gold/10 px-4 py-2 text-xs font-semibold tracking-wide text-gold">
               <Sparkles size={14} /> Modern stewardship. Enduring value.
             </div>
-            <h1 className="display-title max-w-4xl text-5xl leading-[.96] md:text-7xl lg:text-[82px]">Wealth built with <span className="text-gold">purpose.</span> Managed for generations.</h1>
+            <h1 className="display-title max-w-4xl text-4xl xs:text-5xl leading-[.96] md:text-7xl lg:text-[82px]">Wealth built with <span className="text-gold">purpose.</span> Managed for generations.</h1>
             <p className="mt-7 max-w-2xl text-base leading-8 text-white/60 md:text-lg">A distinguished dual investment platform bringing institutional discipline to digital assets and global equities.</p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
               <Link to="/register" className="btn-primary px-7 py-4">Begin your journey <ArrowRight size={17} /></Link>
@@ -148,12 +158,42 @@ export default function LandingPage() {
       <section id="plans" className="bg-white px-5 py-28">
         <div className="mx-auto max-w-6xl">
           <SectionTitle kicker="Investment plans" title="Clarity at every horizon." text="Select a weekly capital commitment and review the projected maturity value before you begin." />
-          <div className="glass-card table-scroll mt-12 overflow-x-auto">
+          
+          {/* Desktop Plans Table */}
+          <div className="glass-card table-scroll mt-12 overflow-x-auto hidden md:block">
             <table className="w-full min-w-[620px] text-left">
               <thead className="bg-navy text-white"><tr><th className="px-7 py-5 text-xs uppercase tracking-widest">Weekly capital</th><th className="px-7 py-5 text-xs uppercase tracking-widest">After 2 months</th><th className="px-7 py-5 text-xs uppercase tracking-widest">After 3 months</th><th className="px-7 py-5" /></tr></thead>
               <tbody>{plans.map(([capital, two, three]) => <tr key={capital} className="border-b border-slate-100 last:border-0 hover:bg-gold/[.04]"><td className="px-7 py-5 font-bold text-navy">${capital.toLocaleString()}</td><td className="px-7 py-5 text-slate-600">${two.toLocaleString()}</td><td className="px-7 py-5 text-slate-600">${three.toLocaleString()}</td><td className="px-7 py-5 text-right"><Link to="/register" className="text-xs font-bold text-gold">Select plan →</Link></td></tr>)}</tbody>
             </table>
           </div>
+
+          {/* Mobile Plans Cards */}
+          <div className="grid gap-4 mt-8 md:hidden">
+            {plans.map(([capital, two, three]) => (
+              <div key={capital} className="glass-card p-5 border border-slate-100 bg-white/70">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Weekly Capital</p>
+                    <p className="font-display text-xl font-bold text-navy">${capital.toLocaleString()}</p>
+                  </div>
+                  <Link to="/register" className="btn-primary min-h-10 px-4 py-2 text-xs">
+                    Select
+                  </Link>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+                  <div>
+                    <p className="text-[9px] uppercase tracking-wider text-slate-400">2 months (8 wks)</p>
+                    <p className="font-display font-semibold text-slate-700">${two.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] uppercase tracking-wider text-slate-400">3 months (13 wks)</p>
+                    <p className="font-display font-semibold text-slate-700">${three.toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
           <p className="mt-4 text-xs leading-5 text-slate-400">Illustrative plan values are subject to the applicable plan agreement and risk disclosures.</p>
         </div>
       </section>

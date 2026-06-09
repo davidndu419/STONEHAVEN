@@ -107,7 +107,98 @@ function ApprovalTable({ type, embedded = false }) {
   return (
     <div>{!embedded && <PageHeader eyebrow="Financial operations" title={title} description="Review evidence and account details before recording a decision." action={<button onClick={load} className="btn-secondary bg-white text-navy"><RefreshCw size={15} /> Refresh</button>} />}
       {embedded && <div className="mb-4 flex justify-end"><button onClick={load} className="btn-secondary bg-white py-2 text-navy"><RefreshCw size={15} /> Refresh</button></div>}
-      {loading ? <div className="glass-card grid h-48 place-items-center"><RefreshCw className="animate-spin text-gold" /></div> : sorted.length ? <div className="glass-card table-scroll overflow-x-auto"><table className="w-full min-w-[900px]"><thead><tr className="bg-navy text-left text-[10px] uppercase tracking-widest text-white/45"><th className="px-6 py-5">Client</th><th>{type === "deposits" ? "Method / reference" : "Withdrawal type / payment details"}</th><th>Amount</th><th>Status</th><th>Submitted</th><th className="pr-6 text-right">Decision</th></tr></thead><tbody>{sorted.map((item) => <tr key={item.id} className="border-b border-slate-100 text-sm last:border-0"><td className="px-6 py-5 font-bold text-navy">{item.userName}</td><td><p>{type === "deposits" ? item.methodName : item.type === "referral" ? "Referral Balance Withdrawal" : "Available Balance Withdrawal"}</p><p className="mt-1 max-w-56 truncate text-xs text-slate-400">{type === "deposits" ? item.reference : item.accountDetails}</p>{item.proofUrl && <a href={item.proofUrl} target="_blank" rel="noreferrer" className="mt-1 block text-xs font-bold text-gold">View payment proof</a>}</td><td className="font-bold text-navy">{money(item.amount)}</td><td><StatusBadge status={item.status} /></td><td className="whitespace-nowrap text-slate-500">{dateTime(item.createdAt)}</td><td className="pr-6 text-right"><div className="flex justify-end gap-2"><button disabled={busyId === item.id} onClick={() => decide(item, "approved")} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 disabled:opacity-50">Approve</button><button disabled={busyId === item.id} onClick={() => setDecision({ item })} className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700 disabled:opacity-50">Decline</button></div></td></tr>)}</tbody></table></div> : <EmptyState icon={type === "deposits" ? ArrowDownToLine : ArrowUpFromLine} title={`No pending ${type}`} text="New requests will appear here as soon as clients submit them." />}
+      {loading ? (
+        <div className="glass-card grid h-48 place-items-center"><RefreshCw className="animate-spin text-gold" /></div>
+      ) : sorted.length ? (
+        <>
+          {/* Desktop Table View */}
+          <div className="glass-card table-scroll overflow-x-auto hidden md:block">
+            <table className="w-full min-w-[900px]">
+              <thead>
+                <tr className="bg-navy text-left text-[10px] uppercase tracking-widest text-white/45">
+                  <th className="px-6 py-5">Client</th>
+                  <th>{type === "deposits" ? "Method / reference" : "Withdrawal type / payment details"}</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th>Submitted</th>
+                  <th className="pr-6 text-right">Decision</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((item) => (
+                  <tr key={item.id} className="border-b border-slate-100 text-sm last:border-0">
+                    <td className="px-6 py-5 font-bold text-navy">{item.userName}</td>
+                    <td>
+                      <p>{type === "deposits" ? item.methodName : item.type === "referral" ? "Referral Balance Withdrawal" : "Available Balance Withdrawal"}</p>
+                      <p className="mt-1 max-w-56 truncate text-xs text-slate-400">{type === "deposits" ? item.reference : item.accountDetails}</p>
+                      {item.proofUrl && <a href={item.proofUrl} target="_blank" rel="noreferrer" className="mt-1 block text-xs font-bold text-gold">View payment proof</a>}
+                    </td>
+                    <td className="font-bold text-navy">{money(item.amount)}</td>
+                    <td><StatusBadge status={item.status} /></td>
+                    <td className="whitespace-nowrap text-slate-500">{dateTime(item.createdAt)}</td>
+                    <td className="pr-6 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button disabled={busyId === item.id} onClick={() => decide(item, "approved")} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 disabled:opacity-50">Approve</button>
+                        <button disabled={busyId === item.id} onClick={() => setDecision({ item })} className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700 disabled:opacity-50">Decline</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile Cards View */}
+          <div className="space-y-4 md:hidden">
+            {sorted.map((item) => (
+              <div key={item.id} className="glass-card p-4 border border-slate-100 bg-white/70">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-bold text-navy text-sm">{item.userName}</p>
+                    <p className="mt-1 text-xs text-slate-600 font-medium">
+                      {type === "deposits" ? item.methodName : item.type === "referral" ? "Referral Balance" : "Available Balance"}
+                    </p>
+                    <p className="mt-1 text-[11px] text-slate-400 font-mono break-all max-w-[200px]">
+                      {type === "deposits" ? `Ref: ${item.reference}` : item.accountDetails}
+                    </p>
+                    {item.proofUrl && (
+                      <a href={item.proofUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs font-bold text-gold underline">
+                        View payment proof
+                      </a>
+                    )}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="font-bold text-navy text-sm">{money(item.amount)}</p>
+                    <div className="mt-1.5"><StatusBadge status={item.status} /></div>
+                  </div>
+                </div>
+                
+                <div className="mt-4 border-t border-slate-100 pt-3 flex items-center justify-between gap-3">
+                  <span className="text-[10px] text-slate-400">{dateTime(item.createdAt)}</span>
+                  <div className="flex gap-2">
+                    <button
+                      disabled={busyId === item.id}
+                      onClick={() => decide(item, "approved")}
+                      className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 disabled:opacity-50 min-h-[36px]"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      disabled={busyId === item.id}
+                      onClick={() => setDecision({ item })}
+                      className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700 disabled:opacity-50 min-h-[36px]"
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <EmptyState icon={type === "deposits" ? ArrowDownToLine : ArrowUpFromLine} title={`No pending ${type}`} text="New requests will appear here as soon as clients submit them."
+      />)}
       <Modal open={Boolean(decision)} onClose={() => { setDecision(null); setReason(""); }} title={`Decline ${type === "deposits" ? "Deposit" : "Withdrawal"}`}><form onSubmit={submitDecision} className="space-y-4"><p className="text-sm text-slate-500">The user will see this reason in their notification and transaction history.</p><div><label className="label">Reason for decline</label><textarea className="field min-h-28" required value={reason} onChange={(event) => setReason(event.target.value)} /></div><button disabled={!reason.trim() || Boolean(busyId)} className="btn-primary w-full">{busyId ? "Saving..." : "Decline request"}</button></form></Modal>
     </div>
   );
@@ -149,7 +240,45 @@ export function AdminReferralsPage() {
   return (
     <div><PageHeader eyebrow="Network activity" title="Referral activity" description="Review introductions and bonus readiness across your client scope." />
       <div className="grid gap-4 sm:grid-cols-3">{[["Introduced clients", referrals.length, Users], ["Active accounts", referrals.filter((item) => item.status === "active").length, Check], ["Bonuses", "Phase 2 trigger", CircleDollarSign]].map(([label, value, Icon]) => <div key={label} className="glass-card p-6"><Icon className="text-gold" /><p className="display-title mt-5 text-3xl text-navy">{value}</p><p className="mt-1 text-xs uppercase tracking-widest text-slate-400">{label}</p></div>)}</div>
-      <div className="glass-card mt-6 table-scroll overflow-x-auto"><table className="w-full min-w-[650px]"><thead><tr className="bg-navy text-left text-[10px] uppercase tracking-widest text-white/45"><th className="px-6 py-5">Client</th><th>Referred by code</th><th>Joined</th><th>Week 1 bonus</th></tr></thead><tbody>{referrals.map((item) => <tr key={item.userId} className="border-b border-slate-100 text-sm"><td className="px-6 py-5 font-bold text-navy">{item.name}</td><td><code>{item.referredBy}</code></td><td>{date(item.createdAt)}</td><td className="text-slate-400">Waiting for Phase 2 investment approval</td></tr>)}</tbody></table></div>
+      {/* Desktop Table View */}
+      <div className="glass-card mt-6 table-scroll overflow-x-auto hidden md:block">
+        <table className="w-full min-w-[650px]">
+          <thead>
+            <tr className="bg-navy text-left text-[10px] uppercase tracking-widest text-white/45">
+              <th className="px-6 py-5">Client</th>
+              <th>Referred by code</th>
+              <th>Joined</th>
+              <th>Week 1 bonus</th>
+            </tr>
+          </thead>
+          <tbody>
+            {referrals.map((item) => (
+              <tr key={item.userId} className="border-b border-slate-100 text-sm text-left">
+                <td className="px-6 py-5 font-bold text-navy">{item.name}</td>
+                <td><code>{item.referredBy}</code></td>
+                <td>{date(item.createdAt)}</td>
+                <td className="text-slate-400">Waiting for Phase 2 investment approval</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile Cards View */}
+      <div className="space-y-4 mt-6 md:hidden">
+        {referrals.map((item) => (
+          <div key={item.userId} className="glass-card p-4 border border-slate-100 bg-white/70 flex flex-col gap-2.5">
+            <div className="flex items-center justify-between">
+              <p className="font-bold text-navy text-sm">{item.name}</p>
+              <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded font-mono text-slate-600">Code: {item.referredBy}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs text-slate-500">
+              <span>Joined: {date(item.createdAt)}</span>
+              <span className="text-[10px] text-slate-400">Waiting for Week 1</span>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

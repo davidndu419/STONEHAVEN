@@ -53,6 +53,8 @@ export default function DashboardHome() {
 
   const modeLabel = investmentModeLabel(activeInvestmentMode);
   const modeInvestments = investments.filter((item) => item.type === activeInvestmentMode && !["deleted", "cancelled"].includes(item.status));
+
+
   const activeInvestments = modeInvestments.filter((item) => !["completed", "flash done"].includes(item.status)).slice(0, 2);
   const lockedBalance = calculateTotalLockedBalance(investments, now);
   const total = calculateTotalPortfolio(user, investments, now);
@@ -90,11 +92,11 @@ export default function DashboardHome() {
             <p className="display-title mt-2 text-4xl md:text-5xl">{money(total)}</p>
             <p className="mt-2 text-xs text-white/45">Your private wealth summary.</p>
           </div>
-          <div className="grid grid-cols-3 gap-3 border-y border-white/10 py-4 lg:border-x lg:border-y-0 lg:px-6 lg:py-1">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-3 border-y border-white/10 py-4 sm:border-y-0 sm:border-x sm:px-6 sm:py-1">
             {[["Available balance", user.availableBalance], ["Locked balance", lockedBalance], ["Referral earnings", user.referralBalance]].map(([label, value]) => (
               <div key={label} className="min-w-0">
                 <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-white/40">{label}</p>
-                <p className="mt-1 truncate font-display text-lg font-bold md:text-xl">{money(value)}</p>
+                <p className="mt-1 truncate font-display text-lg font-bold sm:text-xl">{money(value)}</p>
                 {label === "Locked balance" && <p className="mt-1 flex items-center gap-1.5 text-[9px] text-white/40"><span className={`h-1.5 w-1.5 rounded-full ${liveInvestments.length ? "animate-pulse bg-emerald-400" : "bg-gold"}`} />{lockedStatus}</p>}
               </div>
             ))}

@@ -198,7 +198,16 @@ export default function DashboardLayout({ admin = false, superAdmin = false }) {
   return (
     <div className="min-h-screen bg-stone">
       <div className="fixed inset-y-0 left-0 z-50 hidden lg:block">{sidebar}</div>
-      {mobileOpen && <div className="fixed inset-0 z-50 bg-navy/60 backdrop-blur-sm lg:hidden"><div className="h-full w-[270px]">{sidebar}</div></div>}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-navy/60 backdrop-blur-sm lg:hidden"
+          onClick={() => setMobileOpen(false)}
+        >
+          <div className="h-full w-[270px]" onClick={(e) => e.stopPropagation()}>
+            {sidebar}
+          </div>
+        </div>
+      )}
       <div className={`transition-all duration-300 ${collapsed ? "lg:ml-[86px]" : "lg:ml-[270px]"}`}>
         <header className="sticky top-0 z-40 flex h-20 items-center justify-between border-b border-slate-200/70 bg-stone/90 px-4 backdrop-blur-xl md:px-7">
           <div className="flex items-center gap-3">
@@ -208,22 +217,35 @@ export default function DashboardLayout({ admin = false, superAdmin = false }) {
           <div className="flex items-center gap-2">
             <div className="relative">
               <button onClick={() => setNotificationOpen(!notificationOpen)} className="relative rounded-xl border border-slate-200 bg-white p-2.5 text-slate-600"><Bell size={19} />{unread > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-burgundy px-1 text-[9px] font-bold text-white">{unread}</span>}</button>
-              {notificationOpen && !admin && <>
-                <button aria-label="Close notifications" onClick={() => setNotificationOpen(false)} className="fixed inset-0 z-40 bg-navy/10 sm:bg-transparent" />
-                <div className="fixed inset-x-3 top-20 z-50 max-h-[min(72vh,540px)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-heritage sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-[380px]">
-                  <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
-                    <p className="font-display text-lg font-bold text-navy">Notifications</p>
-                    <div className="flex items-center gap-3">
-                      <button onClick={() => { setNotificationOpen(false); navigate("/dashboard/notifications"); }} className="text-xs font-bold text-gold">View all</button>
-                      <button aria-label="Close notifications" onClick={() => setNotificationOpen(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-stone hover:text-navy"><X size={17} /></button>
+              {notificationOpen && !admin && (
+                <>
+                  <button aria-label="Close notifications" onClick={() => setNotificationOpen(false)} className="fixed inset-0 z-40 bg-navy/60 backdrop-blur-sm sm:bg-transparent" />
+                  <div className="fixed inset-y-0 right-0 z-50 flex w-[85vw] max-w-[360px] flex-col bg-white shadow-2xl drawer-slide-in sm:absolute sm:inset-y-auto sm:right-0 sm:top-auto sm:z-50 sm:mt-2 sm:w-[380px] sm:max-h-[min(72vh,540px)] sm:flex-none sm:rounded-2xl sm:border sm:border-slate-200 sm:shadow-heritage sm:animate-none">
+                    <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-4 sm:py-3">
+                      <p className="font-display text-lg font-bold text-navy">Notifications</p>
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => { setNotificationOpen(false); navigate("/dashboard/notifications"); }} className="text-xs font-bold text-gold">View all</button>
+                        <button aria-label="Close notifications" onClick={() => setNotificationOpen(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-stone hover:text-navy"><X size={17} /></button>
+                      </div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto overscroll-contain p-2 sm:max-h-[calc(min(72vh,540px)-57px)]">
+                      {unreadNotifications.slice(0, 10).map((item) => (
+                        <button key={item.id} onClick={async () => { await dataService.update("notifications", item.id, { read: true }); setNotifications((current) => current.map((entry) => entry.id === item.id ? { ...entry, read: true } : entry)); }} className="w-full rounded-xl p-3 text-left hover:bg-stone">
+                          <div className="flex gap-3">
+                            <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-gold" />
+                            <div className="min-w-0">
+                              <p className="break-words text-sm font-bold text-navy">{item.title}</p>
+                              <p className="mt-1 whitespace-normal break-words text-xs leading-5 text-slate-500">{item.message}</p>
+                              <p className="mt-2 text-[10px] uppercase tracking-wider text-slate-400">{notificationTime(item.createdAt)}</p>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                      {!unreadNotifications.length && <p className="p-6 text-center text-sm text-slate-400">No new notifications</p>}
                     </div>
                   </div>
-                  <div className="max-h-[calc(min(72vh,540px)-57px)] overflow-y-auto overscroll-contain p-2">
-                    {unreadNotifications.slice(0, 10).map((item) => <button key={item.id} onClick={async () => { await dataService.update("notifications", item.id, { read: true }); setNotifications((current) => current.map((entry) => entry.id === item.id ? { ...entry, read: true } : entry)); }} className="w-full rounded-xl p-3 text-left hover:bg-stone"><div className="flex gap-3"><span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-gold" /><div className="min-w-0"><p className="break-words text-sm font-bold text-navy">{item.title}</p><p className="mt-1 whitespace-normal break-words text-xs leading-5 text-slate-500">{item.message}</p><p className="mt-2 text-[10px] uppercase tracking-wider text-slate-400">{notificationTime(item.createdAt)}</p></div></div></button>)}
-                    {!unreadNotifications.length && <p className="p-6 text-center text-sm text-slate-400">No new notifications</p>}
-                  </div>
-                </div>
-              </>}
+                </>
+              )}
             </div>
             <div className="relative">
               <button onClick={() => setProfileOpen(!profileOpen)} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-1.5 pr-3">

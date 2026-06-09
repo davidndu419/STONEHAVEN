@@ -205,7 +205,7 @@ export function SettingsPage() {
       <ReadOnlyField label="Date joined" value={dateTime(user.createdAt)} /><ReadOnlyField label="Last login" value={dateTime(user.lastLogin)} /><ReadOnlyField label="Referral code" value={user.referralCode} /><ReadOnlyField label="User ID" value={user.userId} />
     </div></div>
     <div className="glass-card p-6"><div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="display-title text-2xl text-navy">KYC summary</h2><p className="mt-2 text-sm text-slate-500">{kycLabel(user.kycStatus)}</p></div><StatusBadge status={user.kycStatus} /></div>{user.kycStatus === "rejected" && <p className="mt-4 rounded-xl bg-red-50 p-4 text-sm text-red-700">{kycSummary?.rejectionReason || kycSummary?.requestDetails || "Review your KYC page for the rejection reason."}</p>}{["verified", "approved"].includes(user.kycStatus) && <p className="mt-4 text-xs text-slate-400">Approved {dateTime(kycSummary?.reviewedAt || user.kycApprovedAt)}</p>}<button type="button" onClick={() => navigate("/dashboard/kyc")} className="btn-secondary mt-5 bg-white text-navy">View KYC Details</button></div>
-    <button disabled={busy} className="btn-primary sticky bottom-4 w-full py-4">{busy ? "Saving..." : "Save profile changes"}</button>
+    <button disabled={busy} className="btn-primary sm:sticky sm:bottom-4 w-full py-4 mt-6">{busy ? "Saving..." : "Save profile changes"}</button>
   </form>;
 
   const securityContent = <div className="space-y-6">

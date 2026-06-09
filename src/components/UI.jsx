@@ -63,7 +63,7 @@ export function Modal({ open, onClose, title, children, wide = false }) {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-[80] grid place-items-center bg-navy/70 p-4 backdrop-blur-sm" onMouseDown={onClose}>
-      <div className={`max-h-[90vh] w-full overflow-y-auto rounded-2xl bg-stone p-6 shadow-heritage ${wide ? "max-w-5xl" : "max-w-lg"}`} onMouseDown={(event) => event.stopPropagation()}>
+      <div className={`max-h-[90vh] w-full overflow-y-auto rounded-2xl bg-stone p-4 sm:p-6 shadow-heritage ${wide ? "max-w-5xl" : "max-w-lg"}`} onMouseDown={(event) => event.stopPropagation()}>
         <div className="mb-5 flex items-center justify-between">
           <h2 className="display-title text-2xl text-navy">{title}</h2>
           <button onClick={onClose} className="rounded-lg px-3 py-1 text-slate-500 hover:bg-slate-200">Close</button>
