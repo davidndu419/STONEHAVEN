@@ -1,10 +1,15 @@
 import { LoaderCircle, Landmark } from "lucide-react";
+import stonehavenLogo from "../assets/stonehaven-logo.jpg";
 
 export function Brand({ compact = false, light = false }) {
   return (
     <div className="flex items-center gap-3">
-      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-gold/40 bg-gold/10 text-gold">
-        <Landmark size={21} strokeWidth={1.7} />
+      <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-gold/40 bg-white">
+        <img
+          src={stonehavenLogo}
+          alt="Stonehaven Investment Group"
+          className="absolute left-1/2 top-1/2 w-[122px] max-w-none -translate-x-1/2 -translate-y-1/2"
+        />
       </div>
       {!compact && (
         <div className={light ? "text-white" : "text-navy"}>

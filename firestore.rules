@@ -102,10 +102,20 @@ service cloud.firestore {
         && isOwner(userId)
         && (
           request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(["name", "phone", "country", "onboarded", "preference", "lastLogin", "currency"])
+            .hasOnly([
+              "name", "firstName", "lastName", "phone", "country", "state", "city",
+              "address", "profilePhotoUrl", "profileUpdatedAt", "profileUpdatedBy",
+              "profileUpdateNotice", "profileChanges", "notificationPreferences", "supportPreferences",
+              "onboarded", "preference", "lastLogin", "currency"
+            ])
           || (
             request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(["name", "phone", "country", "onboarded", "preference", "lastLogin", "kycStatus", "currency"])
+              .hasOnly([
+                "name", "firstName", "lastName", "phone", "country", "state", "city",
+                "address", "profilePhotoUrl", "profileUpdatedAt", "profileUpdatedBy",
+                "profileUpdateNotice", "profileChanges", "notificationPreferences", "supportPreferences",
+                "onboarded", "preference", "lastLogin", "kycStatus", "currency"
+              ])
             && request.resource.data.kycStatus == "pending"
           )
         )
@@ -116,6 +126,7 @@ service cloud.firestore {
         && request.resource.data.availableBalance == resource.data.availableBalance
         && request.resource.data.referralBalance == resource.data.referralBalance
         && request.resource.data.lockedBalance == resource.data.lockedBalance
+        && (!request.resource.data.keys().hasAny(["profileUpdatedBy"]) || request.resource.data.profileUpdatedBy == "user")
       ) || (
         isAdmin()
         && ownsAdminScope(resource.data.adminId)
@@ -245,6 +256,7 @@ service cloud.firestore {
             && request.resource.data.userId == request.auth.uid
             && request.resource.data.adminId == profile().adminId
             && request.resource.data.status == "pending"
+            && !("visibility" in request.resource.data)
           ) || (
             isAdmin()
             && ownsAdminScope(request.resource.data.adminId)
@@ -252,9 +264,20 @@ service cloud.firestore {
         )
         && request.resource.data.keys().hasOnly([
           "userId", "adminId", "type", "label", "amount", "status", "createdAt",
-          "reason", "adminActorId", "adminActorName", "targetId"
+          "reason", "adminActorId", "adminActorName", "targetId", "direction",
+          "balanceType", "createdBy", "createdByRole", "visibility",
+          "beforeBalance", "afterBalance", "sourceId", "depositId",
+          "withdrawalId", "withdrawalType"
         ]);
-      allow update, delete: if false;
+      allow update: if scopedRecord()
+        && resource.data.status == "pending"
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly([
+            "label", "status", "reviewedAt", "approvedAt", "approvedBy",
+            "declinedAt", "declinedBy", "declineReason"
+          ])
+        && request.resource.data.status in ["approved", "declined"];
+      allow delete: if false;
     }
 
     match /notifications/{documentId} {
@@ -311,7 +334,7 @@ service cloud.firestore {
         && request.resource.data.adminId == profile().adminId
         && request.resource.data.keys().hasOnly([
           "ticketId", "userId", "userName", "adminId", "subject", "category",
-          "status", "messages", "adminUnread", "userUnread", "createdAt"
+          "userPhotoUrl", "status", "messages", "adminUnread", "userUnread", "createdAt"
         ])
         && request.resource.data.ticketId is string
         && request.resource.data.subject is string
@@ -321,7 +344,7 @@ service cloud.firestore {
       allow update: if (
           ownsRecord()
           && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(["messages", "adminUnread", "userUnread", "updatedAt"])
+            .hasOnly(["messages", "userPhotoUrl", "adminUnread", "userUnread", "updatedAt"])
           && request.resource.data.userId == resource.data.userId
           && request.resource.data.adminId == resource.data.adminId
           && request.resource.data.status == resource.data.status
@@ -332,7 +355,7 @@ service cloud.firestore {
           && request.resource.data.adminId == resource.data.adminId
           && request.resource.data.keys().hasOnly([
             "ticketId", "userId", "userName", "adminId", "subject", "category",
-            "status", "messages", "adminUnread", "userUnread", "createdAt", "updatedAt",
+            "userPhotoUrl", "status", "messages", "adminUnread", "userUnread", "createdAt", "updatedAt",
             "deletedForUser", "deletedForUserAt", "deletedForUserBy",
             "archivedForAdmin", "archivedForAdminAt", "archivedForAdminBy"
           ])

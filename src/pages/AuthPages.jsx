@@ -55,7 +55,6 @@ export function LoginPage() {
         <div><div className="flex justify-between"><label className="label">Password</label><Link to="/forgot-password" className="text-xs font-semibold text-gold">Forgot password?</Link></div><div className="relative"><input className="field pr-12" type={showPassword ? "text" : "password"} required value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /><button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-3.5 text-slate-400">{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div></div>
         <button disabled={busy} className="btn-primary w-full py-3.5">{busy ? "Signing in..." : "Sign in securely"} <ArrowRight size={16} /></button>
       </form>
-      <div className="mt-6 rounded-xl border border-gold/20 bg-gold/[.06] p-4 text-xs leading-6 text-slate-500"><strong className="text-navy">Demo access</strong><br />User: user@stonehaven.test · Admin: admin@stonehaven.test<br />Super admin: superadmin@stonehaven.test · Password: demo123</div>
       <p className="mt-7 text-center text-sm text-slate-500">New to Stonehaven? <Link to="/register" className="font-bold text-gold">Create an account</Link></p>
     </AuthShell>
   );

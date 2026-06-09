@@ -102,6 +102,17 @@ beforeEach(async () => {
         amount: 300,
         status: "pending",
       }),
+      setDoc(doc(db, "transactions", "transaction-a"), {
+        userId: "user-a",
+        adminId: "ADMIN-A",
+        type: "deposit",
+        label: "Deposit submitted",
+        amount: 200,
+        status: "pending",
+        depositId: "deposit-a",
+        sourceId: "deposit-a",
+        createdAt: "2026-06-09T10:00:00.000Z",
+      }),
     ]);
   });
 });
@@ -184,6 +195,56 @@ describe("profile authority", () => {
     await assertFails(deleteDoc(doc(db, "users", "user-a")));
   });
 
+  test("user can update approved profile fields and preferences", async () => {
+    const db = environment.authenticatedContext("user-a", {
+      email: "user-a@example.test",
+      role: "user",
+      adminId: "ADMIN-A",
+    }).firestore();
+    await assertSucceeds(updateDoc(doc(db, "users", "user-a"), {
+      firstName: "Sarah",
+      lastName: "Stone",
+      name: "Sarah Stone",
+      phone: "+1 202 555 0147",
+      country: "United States",
+      state: "New York",
+      city: "New York",
+      address: "10 Stonehaven Avenue",
+      profilePhotoUrl: "https://example.test/profile.jpg",
+      profileUpdatedAt: "2026-06-09T10:00:00.000Z",
+      profileUpdatedBy: "user",
+      profileUpdateNotice: "User updated profile information.",
+      profileChanges: [{
+        fieldChanged: "phone",
+        oldValue: "+10000000000",
+        newValue: "+1 202 555 0147",
+        changedAt: "2026-06-09T10:00:00.000Z",
+      }],
+      notificationPreferences: { financial: true, support: false },
+      supportPreferences: { emailReplies: true },
+    }));
+  });
+
+  test("user profile updates cannot change protected account authority", async () => {
+    const db = environment.authenticatedContext("user-a", {
+      email: "user-a@example.test",
+      role: "user",
+      adminId: "ADMIN-A",
+    }).firestore();
+    for (const changes of [
+      { role: "superadmin" },
+      { adminId: "GLOBAL" },
+      { status: "suspended" },
+      { availableBalance: 1000000 },
+      { referralBalance: 1000000 },
+      { lockedBalance: 1000000 },
+      { kycStatus: "verified" },
+      { email: "changed@example.test" },
+    ]) {
+      await assertFails(updateDoc(doc(db, "users", "user-a"), changes));
+    }
+  });
+
   test("clients cannot write account controls", async () => {
     const db = environment.authenticatedContext("user-a", {
       email: "user-a@example.test",
@@ -261,6 +322,83 @@ describe("profile authority", () => {
 });
 
 describe("financial creation", () => {
+  test("administrator can review an existing request transaction without replacing it", async () => {
+    const db = environment.authenticatedContext("admin-a", {
+      role: "sub-admin",
+      adminId: "ADMIN-A",
+    }).firestore();
+    await assertSucceeds(updateDoc(doc(db, "transactions", "transaction-a"), {
+      label: "Deposit",
+      status: "declined",
+      reviewedAt: "2026-06-09T11:00:00.000Z",
+      declinedAt: "2026-06-09T11:00:00.000Z",
+      declinedBy: "admin-a",
+      declineReason: "Insufficient payment proof",
+    }));
+  });
+
+  test("normal user cannot approve or decline their own request transaction", async () => {
+    const db = environment.authenticatedContext("user-a", {
+      role: "user",
+      adminId: "ADMIN-A",
+    }).firestore();
+    await assertFails(updateDoc(doc(db, "transactions", "transaction-a"), {
+      label: "Deposit",
+      status: "approved",
+      reviewedAt: "2026-06-09T11:00:00.000Z",
+      approvedAt: "2026-06-09T11:00:00.000Z",
+      approvedBy: "user-a",
+    }));
+  });
+
+  test("administrator can create an internal manual balance adjustment record", async () => {
+    const db = environment.authenticatedContext("admin-a", {
+      role: "sub-admin",
+      adminId: "ADMIN-A",
+    }).firestore();
+    await assertSucceeds(addDoc(collection(db, "transactions"), {
+      userId: "user-a",
+      adminId: "ADMIN-A",
+      type: "manual_balance_adjustment",
+      label: "Available balance added",
+      direction: "credit",
+      amount: 50,
+      balanceType: "available",
+      reason: "Account reconciliation",
+      status: "completed",
+      createdAt: "2026-06-09T10:00:00.000Z",
+      createdBy: "admin-a",
+      createdByRole: "sub-admin",
+      adminActorId: "admin-a",
+      adminActorName: "User admin-a",
+      beforeBalance: 0,
+      afterBalance: 50,
+      visibility: "admin_only",
+    }));
+  });
+
+  test("normal user cannot create an internal manual balance adjustment record", async () => {
+    const db = environment.authenticatedContext("user-a", {
+      role: "user",
+      adminId: "ADMIN-A",
+    }).firestore();
+    await assertFails(addDoc(collection(db, "transactions"), {
+      userId: "user-a",
+      adminId: "ADMIN-A",
+      type: "manual_balance_adjustment",
+      label: "Available balance added",
+      direction: "credit",
+      amount: 50,
+      balanceType: "available",
+      reason: "Unauthorized adjustment",
+      status: "pending",
+      createdAt: "2026-06-09T10:00:00.000Z",
+      createdBy: "user-a",
+      createdByRole: "user",
+      visibility: "admin_only",
+    }));
+  });
+
   test("normal user cannot create financial or audit records directly", async () => {
     const db = environment.authenticatedContext("user-a", {
       role: "user",

@@ -359,7 +359,10 @@ export function ReferralsPage() {
     Promise.all([dataService.listUsers(user.adminId), dataService.listForUser("transactions", user.userId)])
       .then(([items, transactionItems]) => {
         setUsers(items.filter((item) => item.referredBy === user.referralCode));
-        setTransactions(transactionItems.filter((item) => item.type?.startsWith("referral_")).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+        setTransactions(transactionItems.filter((item) =>
+          item.visibility !== "admin_only"
+          && (item.type?.startsWith("referral_") || (item.type === "withdrawal" && item.withdrawalType === "referral"))
+        ).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
       });
   }, [user]);
   const link = `${window.location.origin}/register?ref=${user.referralCode}&admin=${user.adminId}`;
@@ -418,7 +421,7 @@ export function TransactionsPage() {
   }, [user.userId]);
   return (
     <div><PageHeader eyebrow="Audit trail" title="Transaction history" description="A chronological record of every financial event on your account." action={<button onClick={() => window.location.reload()} className="btn-secondary bg-white text-navy"><RefreshCw size={15} /> Refresh</button>} />
-      {loading ? <div className="glass-card grid h-56 place-items-center"><RefreshCw className="animate-spin text-gold" /></div> : items.length ? <div className="glass-card table-scroll overflow-x-auto"><table className="w-full min-w-[700px]"><thead><tr className="bg-navy text-left text-[10px] uppercase tracking-widest text-white/50"><th className="px-6 py-5">Event</th><th>Amount</th><th>Status</th><th>Date & time</th></tr></thead><tbody>{items.map((item) => <tr key={item.id} className="border-b border-slate-100 text-sm last:border-0"><td className="px-6 py-5"><div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-lg bg-gold/10 text-gold"><History size={16} /></span><div><p className="font-bold text-navy">{item.label}</p><p className="mt-1 text-[10px] uppercase tracking-wider text-slate-400">{item.type.replaceAll("_", " ")}</p></div></div></td><td className="font-bold text-navy">{money(item.amount)}</td><td><StatusBadge status={item.status} /></td><td className="whitespace-nowrap text-slate-500">{dateTime(item.createdAt)}</td></tr>)}</tbody></table></div> : <EmptyState icon={History} title="No transactions yet" text="Deposits, withdrawals, referral bonuses, and administrative adjustments will be recorded here." />}
+      {loading ? <div className="glass-card grid h-56 place-items-center"><RefreshCw className="animate-spin text-gold" /></div> : items.length ? <div className="glass-card table-scroll overflow-x-auto"><table className="w-full min-w-[700px]"><thead><tr className="bg-navy text-left text-[10px] uppercase tracking-widest text-white/50"><th className="px-6 py-5">Event</th><th>Amount</th><th>Status</th><th>Date & time</th></tr></thead><tbody>{items.map((item) => <tr key={item.id} className="border-b border-slate-100 text-sm last:border-0"><td className="px-6 py-5"><div className="flex items-start gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gold/10 text-gold"><History size={16} /></span><div><p className="font-bold text-navy">{item.label}</p><p className="mt-1 text-[10px] uppercase tracking-wider text-slate-400">{item.type.replaceAll("_", " ")}</p>{item.reason && <p className="mt-2 text-xs leading-5 text-red-600">Reason: {item.reason}</p>}</div></div></td><td className="font-bold text-navy">{money(item.amount)}</td><td><StatusBadge status={item.status} /></td><td className="whitespace-nowrap text-slate-500">{dateTime(item.createdAt)}</td></tr>)}</tbody></table></div> : <EmptyState icon={History} title="No transactions yet" text="Deposits, withdrawals, referral bonuses, and administrative adjustments will be recorded here." />}
     </div>
   );
 }

@@ -199,7 +199,6 @@ export async function rejectInvestmentDeposit(deposit) {
     week, status: "rejected", amount: deposit.amount, depositId: deposit.id, submittedAt: deposit.createdAt, reviewedAt: new Date().toISOString(),
   }].sort((a, b) => a.week - b.week);
   await dataService.update("investments", investment.id, { timeline });
-  await notify(investment, "deposit", "Deposit rejected", `Your Week ${week} deposit requires resubmission.`);
 }
 
 export async function processInvestmentTimers(userId) {

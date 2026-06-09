@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import LandingPage from "./pages/LandingPage";
 import { ForgotPasswordPage, LoginPage, OnboardingPage, RegisterPage } from "./pages/AuthPages";
-import { DepositPage, ReferralWithdrawalPage, ReferralsPage, SettingsPage, TransactionsPage, WithdrawalPage } from "./pages/UserPages";
+import { DepositPage, ReferralWithdrawalPage, ReferralsPage, TransactionsPage, WithdrawalPage } from "./pages/UserPages";
+import { SettingsPage } from "./pages/SettingsPage";
 import { FundInvestmentPage } from "./pages/FundingPages";
 import { CryptoInvestmentPage, EarningsPage, FlashInvestmentPage, InvestmentsPage, PortfolioPage, StockInvestmentPage, StockResearchPage } from "./pages/InvestmentPages";
 import { AdminInvestmentsPage, InvestmentLibraryPage } from "./pages/AdminInvestmentPages";
@@ -82,6 +83,7 @@ export default function App() {
         <Route element={<DashboardLayout admin />}>
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/admin/users" element={<UsersAdminPage />} />
+          <Route path="/admin/users/:userId" element={<UserControlCenter />} />
           <Route path="/admin/investments" element={<AdminInvestmentsPage />} />
           <Route path="/admin/investment-library" element={<InvestmentLibraryPage />} />
           <Route path="/admin/flash" element={<Navigate to="/admin/investment-library" replace />} />

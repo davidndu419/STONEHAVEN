@@ -591,10 +591,11 @@ export const submitDepositIntent = onCall(options, async (request) => {
     transaction.set(transactionRef, {
       userId: identity.uid,
       adminId: profile.data().adminId,
-      type: input.investmentId ? "weekly_deposit" : "deposit_submitted",
-      label: text(input.label, 300),
+      type: "deposit",
+      label: "Deposit submitted",
       amount,
       status: "pending",
+      depositId: depositRef.id,
       sourceId: depositRef.id,
       createdAt: FieldValue.serverTimestamp(),
     });
@@ -646,10 +647,12 @@ export const requestWithdrawalIntent = onCall(options, async (request) => {
     transaction.set(transactionRef, {
       userId: identity.uid,
       adminId: profile.data().adminId,
-      type: type === "referral" ? "referral_withdrawal" : "withdrawal_requested",
-      label: `${type === "investment" ? "Investment" : "Referral"} withdrawal requested`,
+      type: "withdrawal",
+      label: "Withdrawal submitted",
       amount,
       status: "pending",
+      withdrawalId: withdrawalRef.id,
+      withdrawalType: type === "referral" ? "referral" : "available",
       sourceId: withdrawalRef.id,
       createdAt: FieldValue.serverTimestamp(),
     });

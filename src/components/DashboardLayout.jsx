@@ -37,6 +37,9 @@ const adminNav = [
   ["announcements", "Announcements", Megaphone],
   ["analytics", "Analytics", BarChart3],
 ];
+const notificationTime = (value) => value
+  ? new Date(value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+  : "";
 
 export default function DashboardLayout({ admin = false, superAdmin = false }) {
   const { user, logout } = useAuth();
@@ -111,7 +114,7 @@ export default function DashboardLayout({ admin = false, superAdmin = false }) {
   useEffect(() => {
     if (!admin) return;
     const changedAfter = (item, section) =>
-      new Date(item.updatedAt || item.createdAt || 0).getTime() > Number(sidebarSeen[section] || 0);
+      new Date(item.profileUpdatedAt || item.updatedAt || item.createdAt || 0).getTime() > Number(sidebarSeen[section] || 0);
     const loadAdminBadges = async () => {
       const names = ["users", "investments", "deposits", "withdrawals", "kycSubmissions", "supportTickets", "announcements"];
       const results = await Promise.allSettled([
@@ -145,7 +148,8 @@ export default function DashboardLayout({ admin = false, superAdmin = false }) {
     const timer = setInterval(loadAdminBadges, 10000);
     return () => clearInterval(timer);
   }, [admin, sidebarSeen, superAdmin, user.adminId]);
-  const unread = notifications.filter((item) => !item.read).length;
+  const unreadNotifications = notifications.filter((item) => !item.read);
+  const unread = unreadNotifications.length;
 
   async function signOutUser() {
     await logout();
@@ -204,11 +208,26 @@ export default function DashboardLayout({ admin = false, superAdmin = false }) {
           <div className="flex items-center gap-2">
             <div className="relative">
               <button onClick={() => setNotificationOpen(!notificationOpen)} className="relative rounded-xl border border-slate-200 bg-white p-2.5 text-slate-600"><Bell size={19} />{unread > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-burgundy px-1 text-[9px] font-bold text-white">{unread}</span>}</button>
-              {notificationOpen && !admin && <div className="absolute right-0 mt-2 w-[min(360px,90vw)] rounded-2xl border border-slate-200 bg-white p-3 shadow-heritage"><div className="flex items-center justify-between px-2 py-2"><p className="font-display text-lg font-bold text-navy">Notifications</p><button onClick={() => navigate("/dashboard/notifications")} className="text-xs font-bold text-gold">View all</button></div><div className="max-h-80 overflow-y-auto">{notifications.slice(0, 5).map((item) => <button key={item.id} onClick={async () => { await dataService.update("notifications", item.id, { read: true }); setNotifications(notifications.map((entry) => entry.id === item.id ? { ...entry, read: true } : entry)); }} className="w-full rounded-xl p-3 text-left hover:bg-stone"><div className="flex gap-3"><span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${item.read ? "bg-slate-200" : "bg-gold"}`} /><div><p className="text-sm font-bold text-navy">{item.title}</p><p className="mt-1 line-clamp-2 text-xs text-slate-500">{item.message}</p></div></div></button>)}{!notifications.length && <p className="p-6 text-center text-sm text-slate-400">No notifications</p>}</div></div>}
+              {notificationOpen && !admin && <>
+                <button aria-label="Close notifications" onClick={() => setNotificationOpen(false)} className="fixed inset-0 z-40 bg-navy/10 sm:bg-transparent" />
+                <div className="fixed inset-x-3 top-20 z-50 max-h-[min(72vh,540px)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-heritage sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-[380px]">
+                  <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+                    <p className="font-display text-lg font-bold text-navy">Notifications</p>
+                    <div className="flex items-center gap-3">
+                      <button onClick={() => { setNotificationOpen(false); navigate("/dashboard/notifications"); }} className="text-xs font-bold text-gold">View all</button>
+                      <button aria-label="Close notifications" onClick={() => setNotificationOpen(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-stone hover:text-navy"><X size={17} /></button>
+                    </div>
+                  </div>
+                  <div className="max-h-[calc(min(72vh,540px)-57px)] overflow-y-auto overscroll-contain p-2">
+                    {unreadNotifications.slice(0, 10).map((item) => <button key={item.id} onClick={async () => { await dataService.update("notifications", item.id, { read: true }); setNotifications((current) => current.map((entry) => entry.id === item.id ? { ...entry, read: true } : entry)); }} className="w-full rounded-xl p-3 text-left hover:bg-stone"><div className="flex gap-3"><span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-gold" /><div className="min-w-0"><p className="break-words text-sm font-bold text-navy">{item.title}</p><p className="mt-1 whitespace-normal break-words text-xs leading-5 text-slate-500">{item.message}</p><p className="mt-2 text-[10px] uppercase tracking-wider text-slate-400">{notificationTime(item.createdAt)}</p></div></div></button>)}
+                    {!unreadNotifications.length && <p className="p-6 text-center text-sm text-slate-400">No new notifications</p>}
+                  </div>
+                </div>
+              </>}
             </div>
             <div className="relative">
               <button onClick={() => setProfileOpen(!profileOpen)} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-1.5 pr-3">
-                <span className="grid h-8 w-8 place-items-center rounded-lg bg-navy font-display font-bold text-gold">{user?.name?.charAt(0)}</span>
+                {user?.profilePhotoUrl ? <img src={user.profilePhotoUrl} alt="" className="h-8 w-8 rounded-lg object-cover" /> : <span className="grid h-8 w-8 place-items-center rounded-lg bg-navy font-display font-bold text-gold">{user?.name?.charAt(0)}</span>}
                 <span className="hidden text-left sm:block"><span className="block text-xs font-bold text-navy">{user?.name}</span><span className="block text-[10px] capitalize text-slate-400">{user?.role}</span></span>
               </button>
               {profileOpen && (

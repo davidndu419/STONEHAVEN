@@ -17,6 +17,7 @@ import {
 } from "../lib/lockedBalance";
 import { approveInvestmentDeposit } from "../lib/investmentEngine";
 import { useCurrency } from "../lib/currency";
+import { reviewFinancialRequest } from "../lib/approvalWorkflow";
 
 const tabs = [
   "Overview", "Balances", "Investments", "Deposits", "Withdrawals",
@@ -43,7 +44,6 @@ function DetailGrid({ items }) {
 function ActionModal({ action, onClose, onSubmit }) {
   const [reason, setReason] = useState("");
   const [amount, setAmount] = useState(action?.defaultAmount ?? "");
-  const [balanceType, setBalanceType] = useState("availableBalance");
   const [message, setMessage] = useState(action?.defaultMessage || "");
   const [busy, setBusy] = useState(false);
   if (!action) return null;
@@ -52,7 +52,7 @@ function ActionModal({ action, onClose, onSubmit }) {
     if (!reason.trim()) return;
     setBusy(true);
     try {
-      await onSubmit({ reason: reason.trim(), amount: Number(amount), balanceType, message: message.trim() });
+      await onSubmit({ reason: reason.trim(), amount: Number(amount), message: message.trim() });
       onClose();
     } finally {
       setBusy(false);
@@ -60,8 +60,8 @@ function ActionModal({ action, onClose, onSubmit }) {
   }
   return <Modal open title={action.title} onClose={onClose}><form onSubmit={submit} className="space-y-4">
     <p className="text-sm leading-6 text-slate-500">{action.description}</p>
+    {action.confirmation && <div className="rounded-xl border border-gold/25 bg-gold/[.07] p-4 text-sm font-semibold leading-6 text-navy">{action.confirmation}</div>}
     {action.amount && <div><label className="label">{action.amountLabel || "Amount"}</label><input className="field" type="number" min={action.allowZero ? 0 : 0.01} step="0.01" required value={amount} onChange={(event) => setAmount(event.target.value)} /></div>}
-    {action.balanceType && <div><label className="label">Balance type</label><select className="field" value={balanceType} onChange={(event) => setBalanceType(event.target.value)}><option value="availableBalance">Available Balance</option><option value="referralBalance">Referral Balance</option></select></div>}
     {action.message && <div><label className="label">{action.messageLabel || "Message"}</label><textarea className="field min-h-28" required value={message} onChange={(event) => setMessage(event.target.value)} /></div>}
     <div><label className="label">Reason <span className="text-red-500">*</span></label><textarea className="field min-h-28" required value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Record the operational reason for this action." /></div>
     <button disabled={busy || !reason.trim()} className="btn-primary w-full">{busy ? "Saving..." : action.confirmLabel || "Confirm action"}</button>
@@ -113,7 +113,7 @@ export function UserControlCenter() {
         dataService.listForUser("deposits", userId),
         dataService.listForUser("withdrawals", userId),
         dataService.listForUser("transactions", userId),
-        dataService.listUsers(actor.adminId, true),
+        dataService.listUsers(actor.adminId, actor.role === "superadmin"),
         dataService.listForUser("kycSubmissions", userId),
         dataService.listForUser("supportTickets", userId),
         dataService.listForUser("adminNotes", userId),
@@ -203,41 +203,52 @@ export function UserControlCenter() {
       }
       if (action.kind === "balance") {
         if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error("Enter a valid amount.");
-        const current = Number(profile[input.balanceType] || 0);
+        const latestProfile = await dataService.getUser(userId);
+        const current = Number(latestProfile?.availableBalance || 0);
         const next = action.direction === "add" ? current + input.amount : current - input.amount;
         if (next < 0) throw new Error("This adjustment would reduce the balance below zero.");
-        await dataService.updateUser(userId, { [input.balanceType]: next });
-        const label = `${action.direction === "add" ? "Balance added" : "Balance reduced"} (${input.balanceType === "referralBalance" ? "referral" : "available"})`;
-        await audit(`balance_${action.direction === "add" ? "added" : "reduced"}`, label, { amount: input.amount, reason: input.reason });
-        await notify("balance", label, `${money(input.amount)}. Reason: ${input.reason}`);
+        const entry = {
+          userId,
+          adminId: profile.adminId,
+          type: "manual_balance_adjustment",
+          label: action.direction === "add" ? "Available balance added" : "Available balance reduced",
+          direction: action.direction === "add" ? "credit" : "debit",
+          amount: input.amount,
+          balanceType: "available",
+          reason: input.reason,
+          status: "completed",
+          createdAt: now(),
+          createdBy: actor.userId,
+          createdByRole: actor.role,
+          adminActorId: actor.userId,
+          adminActorName: actor.name,
+          beforeBalance: current,
+          afterBalance: next,
+          visibility: "admin_only",
+        };
+        await dataService.updateUser(userId, { availableBalance: next });
+        await Promise.all([
+          dataService.log(entry),
+          dataService.create("adminAuditRecords", entry),
+        ]);
       }
       if (action.kind === "deposit") {
-        const approved = action.status === "approved";
-        const changes = approved
-          ? { status: "approved", approvedAt: now(), approvedBy: actor.userId, reviewedAt: now() }
-          : { status: "rejected", declineReason: input.reason, declinedAt: now(), declinedBy: actor.userId, reviewedAt: now() };
-        if (approved && !action.item.investmentId) {
-          await dataService.updateUser(userId, { availableBalance: Number(profile.availableBalance || 0) + Number(action.item.amount) });
-        }
-        if (approved && action.item.investmentId) await approveInvestmentDeposit(action.item);
-        await dataService.update("deposits", action.item.id, changes);
-        await audit(`deposit_${changes.status}`, `Deposit ${changes.status}`, { amount: action.item.amount, status: changes.status, reason: input.reason, targetId: action.item.id });
-        await notify("deposit", `Deposit ${changes.status}`, `${money(action.item.amount)} deposit ${changes.status}.${approved ? "" : ` Reason: ${input.reason}`}`);
+        await reviewFinancialRequest({
+          collection: "deposits",
+          item: action.item,
+          status: action.status,
+          reason: input.reason,
+          actor,
+        });
       }
       if (action.kind === "withdrawal") {
-        const approved = action.status === "approved";
-        if (approved) {
-          const field = action.item.type === "referral" ? "referralBalance" : "availableBalance";
-          const current = Number(profile[field] || 0);
-          if (current < Number(action.item.amount)) throw new Error(`The user's ${field === "referralBalance" ? "referral" : "available"} balance is insufficient.`);
-          await dataService.updateUser(userId, { [field]: current - Number(action.item.amount) });
-        }
-        const changes = approved
-          ? { status: "approved", approvedAt: now(), approvedBy: actor.userId, reviewedAt: now() }
-          : { status: "rejected", declineReason: input.reason, declinedAt: now(), declinedBy: actor.userId, reviewedAt: now() };
-        await dataService.update("withdrawals", action.item.id, changes);
-        await audit(`withdrawal_${changes.status}`, `${action.item.type} withdrawal ${changes.status}`, { amount: action.item.amount, status: changes.status, reason: input.reason, targetId: action.item.id });
-        await notify("withdrawal", `Withdrawal ${changes.status}`, `${money(action.item.amount)} ${action.item.type} withdrawal ${changes.status}.${approved ? "" : ` Reason: ${input.reason}`}`);
+        await reviewFinancialRequest({
+          collection: "withdrawals",
+          item: action.item,
+          status: action.status,
+          reason: input.reason,
+          actor,
+        });
       }
       if (action.kind === "investment-status") {
         const investment = action.item;
@@ -350,14 +361,16 @@ export function UserControlCenter() {
       <StatCard label="Referral balance" value={money(profile.referralBalance)} icon={Users} />
       <StatCard label="Total portfolio" value={money(portfolio)} icon={TrendingUp} />
     </div>
-    <div className="glass-card p-6"><h2 className="display-title mb-5 text-2xl text-navy">Account profile</h2><DetailGrid items={[
+    <div className="glass-card p-6"><div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center">{profile.profilePhotoUrl ? <img src={profile.profilePhotoUrl} alt="" className="h-24 w-24 rounded-2xl object-cover" /> : <span className="grid h-24 w-24 place-items-center rounded-2xl bg-navy font-display text-3xl font-bold text-gold">{profile.name?.charAt(0)}</span>}<div><h2 className="display-title text-2xl text-navy">Profile information</h2><p className="mt-1 text-sm text-slate-500">Updated by {profile.profileUpdatedBy === "user" ? "User" : profile.profileUpdatedBy || "system"} · {dateTime(profile.profileUpdatedAt)}</p>{profile.profileUpdateNotice && <p className="mt-2 text-xs font-bold text-gold">{profile.profileUpdateNotice}</p>}</div></div><DetailGrid items={[
       ["Full name", profile.name], ["Email", profile.email], ["Phone", profile.phone],
-      ["Country", profile.country], ["Role", <StatusBadge status={profile.role} />], ["Admin scope", profile.adminId],
+      ["Address", profile.address], ["Country", profile.country], ["State / Region", profile.state],
+      ["City", profile.city], ["Role", <StatusBadge status={profile.role} />], ["Admin scope", profile.adminId],
       ["Account status", <StatusBadge status={profile.status} />], ["KYC status", <StatusBadge status={profile.kycStatus} />],
+      ["User UID", <code className="break-all text-xs">{profile.userId}</code>],
       ["Date joined", dateTime(profile.createdAt)], ["Last login", dateTime(profile.lastLogin)],
       ["Withdrawal status", profile.freezeWithdrawal ? <span className="text-red-600">Frozen</span> : <span className="text-emerald-700">Enabled</span>],
       ["Referral code", profile.referralCode || "Not assigned"],
-    ]} /></div>
+    ]} />{profile.profileChanges?.length > 0 && <details className="mt-5 rounded-xl border border-slate-200"><summary className="cursor-pointer px-4 py-3 text-sm font-bold text-navy">Profile change history ({profile.profileChanges.length})</summary><div className="divide-y divide-slate-100 border-t border-slate-200">{[...profile.profileChanges].reverse().map((change, index) => <div key={`${change.changedAt}-${change.fieldChanged}-${index}`} className="p-4 text-xs"><p className="font-bold capitalize text-navy">{change.fieldChanged.replaceAll("_", " ")}</p><p className="mt-1 break-words text-slate-500">{change.oldValue || "Empty"} → {change.newValue || "Empty"}</p><p className="mt-1 text-slate-400">{dateTime(change.changedAt)}</p></div>)}</div></details>}</div>
     {profile.freezeWithdrawal && <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700"><strong>Withdrawal freeze message:</strong> {profile.withdrawalFreezeMessage}</div>}
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <StatCard label="Investments" value={records.investments.length} note={`${records.investments.filter((item) => activeInvestment(item.status)).length} active`} icon={TrendingUp} />
@@ -374,7 +387,7 @@ export function UserControlCenter() {
       <StatCard label="Locked" value={money(lockedBalance)} icon={LockKeyhole} />
       <StatCard label="Portfolio" value={money(portfolio)} icon={TrendingUp} />
     </div>
-    <div className="glass-card p-6"><h2 className="display-title text-2xl text-navy">Manual adjustment</h2><p className="mt-2 text-sm text-slate-500">Every adjustment creates transaction history, an admin audit record, and a user notification.</p><div className="mt-5 flex flex-wrap gap-3"><button onClick={() => openAction({ kind: "balance", direction: "add", title: "Add balance", description: "Credit the selected user balance.", amount: true, balanceType: true })} className="btn-primary">Add balance</button><button onClick={() => openAction({ kind: "balance", direction: "reduce", title: "Reduce balance", description: "Debit the selected user balance. The balance cannot fall below zero.", amount: true, balanceType: true })} className="rounded-xl bg-red-50 px-5 py-3 text-sm font-bold text-red-700">Reduce balance</button></div></div>
+    <div className="glass-card p-6"><h2 className="display-title text-2xl text-navy">Available balance adjustment</h2><p className="mt-2 text-sm text-slate-500">Internal adjustments are recorded in the admin ledger and audit history. They do not notify the user or change referral balance.</p><div className="mt-5 grid gap-3 sm:grid-cols-2"><button onClick={() => openAction({ kind: "balance", direction: "add", title: "Add available balance", description: "Credit this user's available balance.", confirmation: "This will increase Available Balance only and create an internal admin record.", amount: true })} className="btn-primary w-full">Add available balance</button><button onClick={() => openAction({ kind: "balance", direction: "reduce", title: "Reduce available balance", description: "Debit this user's available balance. The balance cannot fall below zero.", confirmation: "This will reduce Available Balance only and create an internal admin record.", amount: true })} className="w-full rounded-xl bg-red-50 px-5 py-3 text-sm font-bold text-red-700">Reduce available balance</button></div></div>
   </div>;
 
   const investments = <RecordsList items={sortedInvestments} emptyTitle="No investments" render={(item) => {
@@ -403,11 +416,11 @@ export function UserControlCenter() {
     </div>;
   }} />;
 
-  const deposits = <RecordsList items={sorted(records.deposits)} emptyTitle="No deposits" render={(item) => <div key={item.id} className="glass-card p-5"><div className="flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><div className="flex items-center gap-2"><StatusBadge status={item.status} /><span className="text-xs text-slate-400">{dateTime(item.createdAt)}</span></div><h3 className="mt-3 font-bold text-navy">{item.methodName || "Deposit"} · {money(item.amount)}</h3><p className="mt-1 text-xs text-slate-500">{item.reference || item.transactionHash || "No reference"}</p>{item.declineReason && <p className="mt-2 text-xs text-red-600">Reason: {item.declineReason}</p>}</div>{item.status === "pending" && <div className="flex gap-2"><button onClick={() => openAction({ kind: "deposit", item, status: "approved", title: "Approve deposit", description: "Approve this deposit and apply any linked investment update." })} className="rounded-xl bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-700">Approve</button><button onClick={() => openAction({ kind: "deposit", item, status: "rejected", title: "Decline deposit", description: "Decline this deposit and send the reason to the user." })} className="rounded-xl bg-red-50 px-4 py-2 text-xs font-bold text-red-700">Decline</button></div>}</div></div>} />;
+  const deposits = <RecordsList items={sorted(records.deposits)} emptyTitle="No deposits" render={(item) => <div key={item.id} className="glass-card p-5"><div className="flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><div className="flex items-center gap-2"><StatusBadge status={item.status} /><span className="text-xs text-slate-400">{dateTime(item.createdAt)}</span></div><h3 className="mt-3 font-bold text-navy">{item.methodName || "Deposit"} · {money(item.amount)}</h3><p className="mt-1 text-xs text-slate-500">{item.reference || item.transactionHash || "No reference"}</p>{item.declineReason && <p className="mt-2 text-xs text-red-600">Reason: {item.declineReason}</p>}</div>{item.status === "pending" && <div className="flex gap-2"><button onClick={() => openAction({ kind: "deposit", item, status: "approved", title: "Approve deposit", description: "Approve this deposit and apply any linked investment update." })} className="rounded-xl bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-700">Approve</button><button onClick={() => openAction({ kind: "deposit", item, status: "declined", title: "Decline Deposit", description: "Decline this deposit and send the reason to the user." })} className="rounded-xl bg-red-50 px-4 py-2 text-xs font-bold text-red-700">Decline</button></div>}</div></div>} />;
 
-  const withdrawals = <RecordsList items={sorted(records.withdrawals)} emptyTitle="No withdrawals" render={(item) => <div key={item.id} className="glass-card p-5"><div className="flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><div className="flex items-center gap-2"><StatusBadge status={item.status} /><span className="rounded-full bg-stone px-2 py-1 text-[10px] font-bold uppercase text-slate-500">{item.type}</span></div><h3 className="mt-3 font-bold text-navy">{money(item.amount)} · {item.method}</h3><p className="mt-1 text-xs text-slate-500">{item.accountDetails}</p><p className="mt-1 text-xs text-slate-400">{dateTime(item.createdAt)}</p>{item.declineReason && <p className="mt-2 text-xs text-red-600">Reason: {item.declineReason}</p>}</div>{item.status === "pending" && <div className="flex gap-2"><button onClick={() => openAction({ kind: "withdrawal", item, status: "approved", title: "Approve withdrawal", description: `Approve and deduct from ${item.type === "referral" ? "referral balance only" : "available balance only"}.` })} className="rounded-xl bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-700">Approve</button><button onClick={() => openAction({ kind: "withdrawal", item, status: "rejected", title: "Decline withdrawal", description: "Decline this withdrawal and send the reason to the user." })} className="rounded-xl bg-red-50 px-4 py-2 text-xs font-bold text-red-700">Decline</button></div>}</div></div>} />;
+  const withdrawals = <RecordsList items={sorted(records.withdrawals)} emptyTitle="No withdrawals" render={(item) => <div key={item.id} className="glass-card p-5"><div className="flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><div className="flex items-center gap-2"><StatusBadge status={item.status} /><span className="rounded-full bg-stone px-2 py-1 text-[10px] font-bold uppercase text-slate-500">{item.type === "referral" ? "Referral Balance Withdrawal" : "Available Balance Withdrawal"}</span></div><h3 className="mt-3 font-bold text-navy">{money(item.amount)} · {item.method}</h3><p className="mt-1 text-xs text-slate-500">{item.accountDetails}</p><p className="mt-1 text-xs text-slate-400">{dateTime(item.createdAt)}</p>{item.declineReason && <p className="mt-2 text-xs text-red-600">Reason: {item.declineReason}</p>}</div>{item.status === "pending" && <div className="flex gap-2"><button onClick={() => openAction({ kind: "withdrawal", item, status: "approved", title: "Approve withdrawal", description: `Approve and deduct from ${item.type === "referral" ? "referral balance only" : "available balance only"}.` })} className="rounded-xl bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-700">Approve</button><button onClick={() => openAction({ kind: "withdrawal", item, status: "declined", title: "Decline Withdrawal", description: "Decline this withdrawal and send the reason to the user." })} className="rounded-xl bg-red-50 px-4 py-2 text-xs font-bold text-red-700">Decline</button></div>}</div></div>} />;
 
-  const transactions = <RecordsList items={sorted(records.transactions)} emptyTitle="No transactions" render={(item) => <div key={item.id} className="glass-card flex flex-col justify-between gap-4 p-5 sm:flex-row sm:items-center"><div><p className="font-bold text-navy">{item.label}</p><p className="mt-1 text-[10px] uppercase tracking-widest text-slate-400">{String(item.type || "").replaceAll("_", " ")} · {dateTime(item.createdAt)}</p>{item.reason && <p className="mt-2 text-xs text-slate-600">Reason: {item.reason}</p>}{item.adminActorName && <p className="mt-1 text-xs text-slate-400">Admin: {item.adminActorName}</p>}</div><div className="text-left sm:text-right">{Number(item.amount || 0) !== 0 && <p className="font-bold text-navy">{money(item.amount)}</p>}<StatusBadge status={item.status} /></div></div>} />;
+  const transactions = <RecordsList items={sorted(records.transactions)} emptyTitle="No transactions" render={(item) => <div key={item.id} className="glass-card flex flex-col justify-between gap-4 p-5 sm:flex-row sm:items-center"><div><div className="flex flex-wrap items-center gap-2"><p className="font-bold text-navy">{item.label}</p>{item.visibility === "admin_only" && <span className="rounded-full bg-amber-50 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-amber-700">Internal</span>}</div><p className="mt-1 text-[10px] uppercase tracking-widest text-slate-400">{String(item.type || "").replaceAll("_", " ")} · {dateTime(item.createdAt)}</p>{item.reason && <p className="mt-2 text-xs text-slate-600">Reason: {item.reason}</p>}{item.adminActorName && <p className="mt-1 text-xs text-slate-400">Admin: {item.adminActorName}</p>}{item.visibility === "admin_only" && <p className="mt-1 text-xs text-slate-400">Available balance: {money(item.beforeBalance)} to {money(item.afterBalance)}</p>}</div><div className="text-left sm:text-right">{Number(item.amount || 0) !== 0 && <p className="font-bold text-navy">{item.direction === "debit" ? "-" : item.direction === "credit" ? "+" : ""}{money(item.amount)}</p>}<StatusBadge status={item.status} /></div></div>} />;
 
   const referrals = <div className="space-y-6"><div className="glass-card p-6"><DetailGrid items={[
     ["Referral code", profile.referralCode || "Not assigned"],
@@ -426,7 +439,7 @@ export function UserControlCenter() {
 
   const tickets = <RecordsList items={sorted(records.tickets)} emptyTitle="No support tickets" render={(item) => {
     const last = item.messages?.[item.messages.length - 1];
-    return <button key={item.id} onClick={() => navigate(`/superadmin/support?ticket=${item.id}`)} className="glass-card flex w-full flex-col justify-between gap-4 p-5 text-left sm:flex-row sm:items-center"><div><div className="flex items-center gap-2"><StatusBadge status={item.status} /><span className="text-xs text-slate-400">{item.ticketId}</span></div><p className="mt-3 font-bold text-navy">{item.subject}</p><p className="mt-1 line-clamp-2 text-xs text-slate-500">{last?.message || "No messages"}</p><p className="mt-2 text-[10px] uppercase tracking-widest text-slate-400">Created {dateTime(item.createdAt)} · Updated {dateTime(item.updatedAt || item.createdAt)}</p></div><div className="flex items-center gap-2 text-xs font-bold text-gold">{item.adminUnread && <span className="rounded-full bg-red-50 px-2 py-1 text-red-600">Unread</span>}Open ticket <ChevronRight size={15} /></div></button>;
+    return <button key={item.id} onClick={() => navigate(`${actor.role === "superadmin" ? "/superadmin" : "/admin"}/support?ticket=${item.id}`)} className="glass-card flex w-full flex-col justify-between gap-4 p-5 text-left sm:flex-row sm:items-center"><div><div className="flex items-center gap-2"><StatusBadge status={item.status} /><span className="text-xs text-slate-400">{item.ticketId}</span></div><p className="mt-3 font-bold text-navy">{item.subject}</p><p className="mt-1 line-clamp-2 text-xs text-slate-500">{last?.message || "No messages"}</p><p className="mt-2 text-[10px] uppercase tracking-widest text-slate-400">Created {dateTime(item.createdAt)} · Updated {dateTime(item.updatedAt || item.createdAt)}</p></div><div className="flex items-center gap-2 text-xs font-bold text-gold">{item.adminUnread && <span className="rounded-full bg-red-50 px-2 py-1 text-red-600">Unread</span>}Open ticket <ChevronRight size={15} /></div></button>;
   }} />;
 
   const notes = <div className="space-y-5"><button onClick={() => openAction({ kind: "note", title: "Add admin note", description: "This internal note is visible to administrators only.", message: true, messageLabel: "Admin note" })} className="btn-primary"><MessageSquare size={16} /> Add note</button><RecordsList items={sorted(records.notes)} emptyTitle="No admin notes" render={(item) => <div key={item.id} className="glass-card p-5"><p className="text-sm leading-6 text-slate-700">{item.note}</p><p className="mt-3 text-[10px] uppercase tracking-widest text-slate-400">{item.adminActorName} · {dateTime(item.createdAt)}</p><p className="mt-1 text-xs text-slate-400">Reason: {item.reason}</p></div>} /></div>;
@@ -438,7 +451,7 @@ export function UserControlCenter() {
   }[tab];
 
   return <div>
-    <button onClick={() => navigate("/superadmin/users")} className="mb-5 inline-flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-navy"><ArrowLeft size={17} /> Back to users</button>
+    <button onClick={() => navigate(actor.role === "superadmin" ? "/superadmin/users" : "/admin/users")} className="mb-5 inline-flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-navy"><ArrowLeft size={17} /> Back to users</button>
     <div className="rounded-2xl bg-navy p-6 text-white shadow-heritage md:p-8"><div className="flex flex-col justify-between gap-6 xl:flex-row xl:items-center"><div><div className="flex flex-wrap items-center gap-2"><StatusBadge status={profile.status} /><StatusBadge status={profile.kycStatus} />{profile.freezeWithdrawal && <span className="rounded-full bg-red-500/20 px-3 py-1 text-xs font-bold text-red-200">Withdrawals frozen</span>}</div><h1 className="display-title mt-4 text-3xl md:text-4xl">{profile.name}</h1><p className="mt-2 text-sm text-white/50">{profile.email} · {profile.adminId}</p></div><div className="flex flex-wrap gap-2"><button onClick={load} className="rounded-xl bg-white/10 px-4 py-3 text-xs font-bold"><RefreshCw className="mr-2 inline" size={14} />Refresh</button>{profile.freezeWithdrawal ? <button onClick={() => openAction({ kind: "unfreeze-withdrawal", title: "Unfreeze withdrawals", description: "Restore withdrawal access for this user." })} className="rounded-xl bg-emerald-500/20 px-4 py-3 text-xs font-bold text-emerald-200">Unfreeze withdrawals</button> : <button onClick={() => openAction({ kind: "freeze-withdrawal", title: "Freeze withdrawals", description: "Block all withdrawal forms and show the user a custom message.", message: true, messageLabel: "User-facing freeze message", defaultMessage: "Your withdrawal is temporarily paused while we complete account review. Please contact support." })} className="rounded-xl bg-blue-500/20 px-4 py-3 text-xs font-bold text-blue-200"><Snowflake className="mr-1 inline" size={14} />Freeze withdrawals</button>}{profile.status === "active" ? <button onClick={() => openAction({ kind: "status", status: "suspended", title: "Suspend account", description: "Suspend this account and record the reason." })} className="rounded-xl bg-red-500/20 px-4 py-3 text-xs font-bold text-red-200">Suspend</button> : <button onClick={() => openAction({ kind: "status", status: "active", title: "Reactivate account", description: "Restore active account access." })} className="rounded-xl bg-emerald-500/20 px-4 py-3 text-xs font-bold text-emerald-200">Reactivate</button>}</div></div></div>
     {error && <div className="mt-5 flex items-start justify-between gap-4 rounded-xl bg-red-50 p-4 text-sm text-red-700"><span>{error}</span><button onClick={() => setError("")}><X size={16} /></button></div>}
     <div className="sticky top-0 z-20 -mx-2 mt-6 overflow-x-auto bg-stone/95 px-2 py-3 backdrop-blur"><div className="flex min-w-max gap-2">{tabs.map((item) => <button key={item} onClick={() => openTab(item)} className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold ${tab === item ? "bg-navy text-white" : "bg-white text-slate-500"}`}>{item}{tabBadges[item] > 0 && <span className={`grid min-h-5 min-w-5 place-items-center rounded-full px-1 text-[10px] font-black ${tab === item ? "bg-red-500 text-white" : "bg-red-50 text-red-600"}`}>{tabBadges[item] > 99 ? "99+" : tabBadges[item]}</span>}</button>)}</div></div>

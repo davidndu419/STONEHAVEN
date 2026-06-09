@@ -67,7 +67,13 @@ export async function createInvestmentIntent(payload) {
 export async function submitDepositIntent(payload) {
   if (callableEnabled) return call("submitDepositIntent", payload);
   const deposit = await dataService.create("deposits", payload.localRecord);
-  await dataService.log(payload.transaction).catch(() => {});
+  await dataService.log({
+    ...payload.transaction,
+    type: "deposit",
+    label: "Deposit submitted",
+    depositId: deposit.id,
+    sourceId: deposit.id,
+  }).catch(() => {});
   if (payload.investmentId) {
     await dataService.update("investments", payload.investmentId, {
       fundingSource: "new_deposit",
@@ -80,7 +86,14 @@ export async function submitDepositIntent(payload) {
 export async function requestWithdrawalIntent(payload) {
   if (callableEnabled) return call("requestWithdrawalIntent", payload);
   const withdrawal = await dataService.create("withdrawals", payload.localRecord);
-  await dataService.log(payload.transaction).catch(() => {});
+  await dataService.log({
+    ...payload.transaction,
+    type: "withdrawal",
+    label: "Withdrawal submitted",
+    withdrawalId: withdrawal.id,
+    sourceId: withdrawal.id,
+    withdrawalType: payload.type === "referral" ? "referral" : "available",
+  }).catch(() => {});
   return withdrawal;
 }
 

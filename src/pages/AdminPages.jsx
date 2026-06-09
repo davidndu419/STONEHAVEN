@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  ArrowDownToLine, ArrowUpFromLine, Check, CircleDollarSign, Clock3, CreditCard,
-  Link2, Plus, RefreshCw, ShieldCheck, Trash2, Upload, UserPlus, Users, X,
+  ArrowDownToLine, ArrowUpFromLine, Check, CircleDollarSign, CreditCard,
+  Link2, Plus, RefreshCw, ShieldCheck, Trash2, Upload, UserPlus, Users,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { dataService } from "../lib/dataService";
 import { uploadToCloudinary } from "../lib/cloudinary";
-import { approveInvestmentDeposit, reconcileInvestmentTimers, rejectInvestmentDeposit } from "../lib/investmentEngine";
-import { createNotification } from "../lib/enterprise";
+import { reconcileInvestmentTimers } from "../lib/investmentEngine";
+import { reviewFinancialRequest } from "../lib/approvalWorkflow";
 import { createAdminInvitation, setManagedUserStatus } from "../lib/securityApi";
 import { EmptyState, Modal, PageHeader, StatusBadge } from "../components/UI";
 import { useCurrency } from "../lib/currency";
@@ -60,8 +60,9 @@ export function AdminDashboard({ superAdmin = false }) {
 export function UsersAdminPage({ superAdmin = false }) {
   const { items: users, load } = useAdminData("users"); const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  const base = superAdmin ? "/superadmin" : "/admin";
   const { format: money } = useCurrency();
-  const [invitationLink, setInvitationLink] = useState(""); const [form, setForm] = useState({ name: "", email: "", country: "", phone: "", adminId: "" }); const clients = users.filter((item) => superAdmin ? true : item.role === "user");
+  const [invitationLink, setInvitationLink] = useState(""); const [form, setForm] = useState({ name: "", email: "", country: "", phone: "", adminId: "" }); const clients = users.filter((item) => item.role === "user");
   async function toggle(user) { await setManagedUserStatus(user.userId, user.status === "active" ? "suspended" : "active"); load(); }
   async function createSubAdmin(event) {
     event.preventDefault();
@@ -70,8 +71,8 @@ export function UsersAdminPage({ superAdmin = false }) {
   }
   return (
     <div><PageHeader eyebrow="Relationship management" title={superAdmin ? "All platform users" : "My clients"} description={superAdmin ? "View clients and advisors across every administrative scope." : "Client records visible within your assigned adminId only."} action={superAdmin && <button onClick={() => setOpen(true)} className="btn-primary"><UserPlus size={16} /> Create sub-admin</button>} />
-      <div className="grid gap-4 md:hidden">{clients.map((client) => <button key={client.userId} onClick={() => superAdmin && navigate(`/superadmin/users/${client.userId}`)} className="glass-card p-5 text-left"><div className="flex items-start justify-between gap-3"><div><p className="font-bold text-navy">{client.name}</p><p className="mt-1 text-xs text-slate-400">{client.email}</p></div><StatusBadge status={client.status} /></div><div className="mt-4 grid grid-cols-2 gap-3 text-xs"><p><span className="text-slate-400">Role</span><br /><strong className="capitalize">{client.role}</strong></p><p><span className="text-slate-400">Admin ID</span><br /><strong>{client.adminId}</strong></p><p><span className="text-slate-400">Available</span><br /><strong>{money(client.availableBalance)}</strong></p><p><span className="text-slate-400">Referral</span><br /><strong>{money(client.referralBalance)}</strong></p></div></button>)}</div>
-      <div className="glass-card table-scroll hidden overflow-x-auto md:block"><table className="w-full min-w-[850px]"><thead><tr className="bg-navy text-left text-[10px] uppercase tracking-widest text-white/45"><th className="px-6 py-5">User</th><th>Role</th><th>Admin ID</th><th>Balances</th><th>Status</th><th className="pr-6 text-right">Actions</th></tr></thead><tbody>{clients.map((client) => <tr key={client.userId} onClick={() => superAdmin && navigate(`/superadmin/users/${client.userId}`)} className={`border-b border-slate-100 text-sm last:border-0 ${superAdmin ? "cursor-pointer hover:bg-gold/[.06]" : ""}`}><td className="px-6 py-5"><p className="font-bold text-navy">{client.name}</p><p className="mt-1 text-xs text-slate-400">{client.email}</p></td><td className="capitalize">{client.role}</td><td><code className="rounded bg-stone px-2 py-1 text-xs">{client.adminId}</code></td><td><p>{money(client.availableBalance)}</p><p className="text-xs text-slate-400">Referral {money(client.referralBalance)}</p></td><td><StatusBadge status={client.status} /></td><td className="pr-6 text-right">{superAdmin ? <span className="text-xs font-bold text-gold">Open control center</span> : <button onClick={(event) => { event.stopPropagation(); toggle(client); }} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold hover:border-gold">{client.status === "active" ? "Suspend" : "Reactivate"}</button>}</td></tr>)}</tbody></table></div>
+      <div className="grid gap-4 md:hidden">{clients.map((client) => <button key={client.userId} onClick={() => navigate(`${base}/users/${client.userId}`)} className="glass-card p-5 text-left"><div className="flex items-start justify-between gap-3"><div><p className="font-bold text-navy">{client.name}</p><p className="mt-1 text-xs text-slate-400">{client.email}</p></div><StatusBadge status={client.status} /></div><div className="mt-4 grid grid-cols-2 gap-3 text-xs"><p><span className="text-slate-400">Role</span><br /><strong className="capitalize">{client.role}</strong></p><p><span className="text-slate-400">Admin ID</span><br /><strong>{client.adminId}</strong></p><p><span className="text-slate-400">Available</span><br /><strong>{money(client.availableBalance)}</strong></p><p><span className="text-slate-400">Referral</span><br /><strong>{money(client.referralBalance)}</strong></p></div></button>)}</div>
+      <div className="glass-card table-scroll hidden overflow-x-auto md:block"><table className="w-full min-w-[850px]"><thead><tr className="bg-navy text-left text-[10px] uppercase tracking-widest text-white/45"><th className="px-6 py-5">User</th><th>Role</th><th>Admin ID</th><th>Balances</th><th>Status</th><th className="pr-6 text-right">Actions</th></tr></thead><tbody>{clients.map((client) => <tr key={client.userId} onClick={() => navigate(`${base}/users/${client.userId}`)} className="cursor-pointer border-b border-slate-100 text-sm last:border-0 hover:bg-gold/[.06]"><td className="px-6 py-5"><p className="font-bold text-navy">{client.name}</p><p className="mt-1 text-xs text-slate-400">{client.email}</p></td><td className="capitalize">{client.role}</td><td><code className="rounded bg-stone px-2 py-1 text-xs">{client.adminId}</code></td><td><p>{money(client.availableBalance)}</p><p className="text-xs text-slate-400">Referral {money(client.referralBalance)}</p></td><td><StatusBadge status={client.status} /></td><td className="pr-6 text-right">{superAdmin ? <span className="text-xs font-bold text-gold">Open control center</span> : <button onClick={(event) => { event.stopPropagation(); toggle(client); }} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold hover:border-gold">{client.status === "active" ? "Suspend" : "Reactivate"}</button>}</td></tr>)}</tbody></table></div>
       <Modal open={open} onClose={() => { setOpen(false); setInvitationLink(""); }} title="Invite sub-admin">{invitationLink ? <div><p className="text-sm leading-6 text-slate-500">Send this single-use invitation link to the intended administrator. It expires after 24 hours and requires MFA before administrative access.</p><input className="field mt-5" readOnly value={invitationLink} /><button onClick={() => navigator.clipboard.writeText(invitationLink)} className="btn-primary mt-4 w-full">Copy secure invitation</button></div> : <form onSubmit={createSubAdmin} className="space-y-4"><div><label className="label">Full name</label><input className="field" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div><div><label className="label">Email</label><input className="field" type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div><div className="grid gap-4 sm:grid-cols-2"><div><label className="label">Phone</label><input className="field" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div><div><label className="label">Country</label><input className="field" value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} /></div></div><div><label className="label">Admin ID <span className="normal-case tracking-normal text-slate-300">(auto if blank)</span></label><input className="field" value={form.adminId} onChange={(e) => setForm({ ...form, adminId: e.target.value.toUpperCase() })} /></div><button className="btn-primary w-full">Create secure invitation</button></form>}</Modal>
     </div>
   );
@@ -83,46 +84,31 @@ function ApprovalTable({ type, embedded = false }) {
   const { format: money } = useCurrency();
   const [decision, setDecision] = useState(null);
   const [reason, setReason] = useState("");
-  async function decide(item, status, decisionReason) {
-    if (type === "withdrawals" && status === "approved") {
-      const user = await dataService.getUser(item.userId); const field = item.type === "referral" ? "referralBalance" : "availableBalance";
-      if ((user[field] || 0) < item.amount) return window.alert("The user's current balance is insufficient for this approval.");
-      await dataService.updateUser(item.userId, { [field]: user[field] - item.amount });
+  const [busyId, setBusyId] = useState("");
+  async function decide(item, status, decisionReason = "") {
+    setBusyId(item.id);
+    try {
+      await reviewFinancialRequest({ collection: type, item, status, reason: decisionReason, actor });
+      await load();
+    } catch (error) {
+      window.alert(error.message);
+    } finally {
+      setBusyId("");
     }
-    if (type === "deposits" && status === "approved" && !item.investmentId) {
-      const user = await dataService.getUser(item.userId);
-      await dataService.updateUser(item.userId, {
-        availableBalance: Number(user.availableBalance || 0) + Number(item.amount),
-      });
-    }
-    if (type === "deposits" && status === "approved") await approveInvestmentDeposit(item);
-    if (type === "deposits" && status === "rejected") await rejectInvestmentDeposit(item);
-    const reviewedAt = new Date().toISOString();
-    const changes = status === "approved"
-      ? { status, reviewedAt, approvedAt: reviewedAt, approvedBy: actor.userId }
-      : status === "rejected"
-        ? { status, reviewedAt, declineReason: decisionReason, declinedAt: reviewedAt, declinedBy: actor.userId }
-        : { status, reviewedAt };
-    await dataService.update(type, item.id, changes);
-    if (type === "withdrawals" && ["approved", "rejected"].includes(status)) await createNotification({ userId: item.userId, adminId: item.adminId, type: "withdrawal", title: `Withdrawal ${status}`, message: `${money(item.amount)} ${item.type} withdrawal was ${status}. Reason: ${decisionReason}` });
-    if (type === "deposits" && !item.investmentId && ["approved", "rejected"].includes(status)) await createNotification({ userId: item.userId, adminId: item.adminId, type: "deposit", title: `Deposit ${status}`, message: `${money(item.amount)} deposit was ${status}. Reason: ${decisionReason}` });
-    const log = { userId: item.userId, adminId: item.adminId, type: `${type === "deposits" ? "deposit" : "withdrawal"}_${status}`, label: `${type === "deposits" ? "Deposit" : "Withdrawal"} ${status}`, amount: item.amount, status, reason: decisionReason, adminActorId: actor.userId, adminActorName: actor.name, targetId: item.id };
-    await Promise.all([dataService.log(log), dataService.create("adminAuditRecords", log)]);
-    load();
   }
   async function submitDecision(event) {
     event.preventDefault();
     if (!reason.trim()) return;
-    await decide(decision.item, decision.status, reason.trim());
+    await decide(decision.item, "declined", reason.trim());
     setDecision(null);
     setReason("");
   }
-  const sorted = [...items].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const sorted = items.filter((item) => item.status === "pending").sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   return (
     <div>{!embedded && <PageHeader eyebrow="Financial operations" title={title} description="Review evidence and account details before recording a decision." action={<button onClick={load} className="btn-secondary bg-white text-navy"><RefreshCw size={15} /> Refresh</button>} />}
       {embedded && <div className="mb-4 flex justify-end"><button onClick={load} className="btn-secondary bg-white py-2 text-navy"><RefreshCw size={15} /> Refresh</button></div>}
-      {loading ? <div className="glass-card grid h-48 place-items-center"><RefreshCw className="animate-spin text-gold" /></div> : sorted.length ? <div className="glass-card table-scroll overflow-x-auto"><table className="w-full min-w-[900px]"><thead><tr className="bg-navy text-left text-[10px] uppercase tracking-widest text-white/45"><th className="px-6 py-5">Client</th><th>{type === "deposits" ? "Method / reference" : "Type / destination"}</th><th>Amount</th><th>Status</th><th>Date & time</th><th className="pr-6 text-right">Decision</th></tr></thead><tbody>{sorted.map((item) => <tr key={item.id} className="border-b border-slate-100 text-sm last:border-0"><td className="px-6 py-5 font-bold text-navy">{item.userName}</td><td><p>{type === "deposits" ? item.methodName : `${item.type} withdrawal`}</p><p className="mt-1 max-w-56 truncate text-xs text-slate-400">{type === "deposits" ? item.reference : item.accountDetails}</p>{item.proofUrl && <a href={item.proofUrl} target="_blank" rel="noreferrer" className="mt-1 block text-xs font-bold text-gold">View payment proof</a>}</td><td className="font-bold text-navy">{money(item.amount)}</td><td><StatusBadge status={item.status} /></td><td className="whitespace-nowrap text-slate-500">{dateTime(item.createdAt)}</td><td className="pr-6 text-right">{item.status === "pending" ? <div className="flex justify-end gap-2"><button title="Approve" onClick={() => setDecision({ item, status: "approved" })} className="rounded-lg bg-emerald-50 p-2.5 text-emerald-700"><Check size={16} /></button>{type === "withdrawals" && <button title="Hold" onClick={() => setDecision({ item, status: "hold" })} className="rounded-lg bg-blue-50 p-2.5 text-blue-700"><Clock3 size={16} /></button>}<button title="Reject" onClick={() => setDecision({ item, status: "rejected" })} className="rounded-lg bg-red-50 p-2.5 text-red-700"><X size={16} /></button></div> : <span className="text-xs text-slate-400">Reviewed</span>}</td></tr>)}</tbody></table></div> : <EmptyState icon={type === "deposits" ? ArrowDownToLine : ArrowUpFromLine} title={`No ${type} found`} text="New requests will appear here as soon as clients submit them." />}
-      <Modal open={Boolean(decision)} onClose={() => { setDecision(null); setReason(""); }} title={`${decision?.status || ""} ${type === "deposits" ? "deposit" : "withdrawal"}`}><form onSubmit={submitDecision} className="space-y-4"><p className="text-sm text-slate-500">A reason is required and will be written to the audit trail.</p><div><label className="label">Reason</label><textarea className="field min-h-28" required value={reason} onChange={(event) => setReason(event.target.value)} /></div><button disabled={!reason.trim()} className="btn-primary w-full">Confirm decision</button></form></Modal>
+      {loading ? <div className="glass-card grid h-48 place-items-center"><RefreshCw className="animate-spin text-gold" /></div> : sorted.length ? <div className="glass-card table-scroll overflow-x-auto"><table className="w-full min-w-[900px]"><thead><tr className="bg-navy text-left text-[10px] uppercase tracking-widest text-white/45"><th className="px-6 py-5">Client</th><th>{type === "deposits" ? "Method / reference" : "Withdrawal type / payment details"}</th><th>Amount</th><th>Status</th><th>Submitted</th><th className="pr-6 text-right">Decision</th></tr></thead><tbody>{sorted.map((item) => <tr key={item.id} className="border-b border-slate-100 text-sm last:border-0"><td className="px-6 py-5 font-bold text-navy">{item.userName}</td><td><p>{type === "deposits" ? item.methodName : item.type === "referral" ? "Referral Balance Withdrawal" : "Available Balance Withdrawal"}</p><p className="mt-1 max-w-56 truncate text-xs text-slate-400">{type === "deposits" ? item.reference : item.accountDetails}</p>{item.proofUrl && <a href={item.proofUrl} target="_blank" rel="noreferrer" className="mt-1 block text-xs font-bold text-gold">View payment proof</a>}</td><td className="font-bold text-navy">{money(item.amount)}</td><td><StatusBadge status={item.status} /></td><td className="whitespace-nowrap text-slate-500">{dateTime(item.createdAt)}</td><td className="pr-6 text-right"><div className="flex justify-end gap-2"><button disabled={busyId === item.id} onClick={() => decide(item, "approved")} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 disabled:opacity-50">Approve</button><button disabled={busyId === item.id} onClick={() => setDecision({ item })} className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700 disabled:opacity-50">Decline</button></div></td></tr>)}</tbody></table></div> : <EmptyState icon={type === "deposits" ? ArrowDownToLine : ArrowUpFromLine} title={`No pending ${type}`} text="New requests will appear here as soon as clients submit them." />}
+      <Modal open={Boolean(decision)} onClose={() => { setDecision(null); setReason(""); }} title={`Decline ${type === "deposits" ? "Deposit" : "Withdrawal"}`}><form onSubmit={submitDecision} className="space-y-4"><p className="text-sm text-slate-500">The user will see this reason in their notification and transaction history.</p><div><label className="label">Reason for decline</label><textarea className="field min-h-28" required value={reason} onChange={(event) => setReason(event.target.value)} /></div><button disabled={!reason.trim() || Boolean(busyId)} className="btn-primary w-full">{busyId ? "Saving..." : "Decline request"}</button></form></Modal>
     </div>
   );
 }
