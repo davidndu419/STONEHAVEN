@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
-  ArrowDownToLine, ArrowUpFromLine, BarChart3, Bell, Building2, ChevronLeft, ChevronRight, CreditCard,
-  FileText, Flame, History, Image, LayoutDashboard, LifeBuoy, LineChart, Link2, LogOut, Megaphone, Menu,
-  Settings, ShieldCheck, Sparkles, TrendingUp, Users, WalletCards, X,
+  ArrowDownToLine, ArrowUpFromLine, BarChart3, Bell, Building2, ChevronLeft, ChevronRight,
+  Flame, History, LayoutDashboard, LifeBuoy, LineChart, Link2, LogOut, Megaphone, Menu,
+  Settings, ShieldCheck, TrendingUp, Users, WalletCards, X,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { Brand } from "./UI";
@@ -31,7 +31,6 @@ const adminNav = [
   ["investments", "Investments", TrendingUp],
   ["investment-library", "Investment Library", LineChart],
   ["approvals", "Approvals", ShieldCheck],
-  ["methods", "Deposit methods", CreditCard],
   ["referrals", "Referrals", WalletCards],
   ["kyc", "KYC review", ShieldCheck],
   ["support", "Support tickets", LifeBuoy],
@@ -63,7 +62,7 @@ export default function DashboardLayout({ admin = false, superAdmin = false }) {
   const [adminBadgeCounts, setAdminBadgeCounts] = useState({});
   const base = superAdmin ? "/superadmin" : "/admin";
   const adminItems = superAdmin
-    ? [...adminNav, ["onboarding-links", "Onboarding links", Link2], ["testimonials", "Testimonials", Sparkles], ["company", "Company info", Building2], ["content", "Content management", FileText], ["branding", "Platform branding", Image], ["platform-settings", "Platform settings", Settings]]
+    ? [...adminNav, ["onboarding-links", "Onboarding links", Link2], ["company-settings", "Company Settings", Building2]]
     : adminNav;
   const navigation = admin ? adminItems.map(([path, label, Icon]) => [`${base}/${path}`, label, Icon]) : userNav;
 

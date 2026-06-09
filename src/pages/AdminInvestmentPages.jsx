@@ -8,6 +8,7 @@ import { money, Timeline } from "../components/InvestmentUI";
 import { approveInvestmentDeposit, reconcileInvestmentTimers } from "../lib/investmentEngine";
 import { calculateLiveLockedBalance, snapshotInvestmentProgress } from "../lib/lockedBalance";
 import { createNotification } from "../lib/enterprise";
+import { DepositMethodsPage } from "./AdminPages";
 
 const defaultTiers = [
   [200, 87000, 88000], [300, 87000, 108000], [400, 107000, 128000], [500, 127000, 148000],
@@ -59,15 +60,17 @@ export const StockLibraryPage = () => <AssetLibraryPage kind="stock" />;
 export function InvestmentLibraryPage() {
   const [active, setActive] = useState("flash");
   return <div>
-    <PageHeader eyebrow="Investment configuration" title="Investment Library" description="Manage flash settings, crypto assets, and stock assets from one place." />
-    <div className="mb-6 grid gap-2 rounded-2xl bg-white p-2 shadow-sm sm:inline-grid sm:min-w-[520px] sm:grid-cols-3">
+    <PageHeader eyebrow="Investment configuration" title="Investment Library" description="Manage flash settings, crypto assets, stock assets, and funding methods from one place." />
+    <div className="mb-6 grid gap-2 rounded-2xl bg-white p-2 shadow-sm sm:inline-grid sm:min-w-[680px] sm:grid-cols-4">
       <button onClick={() => setActive("flash")} className={`rounded-xl px-4 py-3 text-sm font-bold ${active === "flash" ? "bg-navy text-white" : "text-slate-500"}`}>Flash settings</button>
       <button onClick={() => setActive("coins")} className={`rounded-xl px-4 py-3 text-sm font-bold ${active === "coins" ? "bg-navy text-white" : "text-slate-500"}`}>Coin library</button>
       <button onClick={() => setActive("stocks")} className={`rounded-xl px-4 py-3 text-sm font-bold ${active === "stocks" ? "bg-navy text-white" : "text-slate-500"}`}>Stock library</button>
+      <button onClick={() => setActive("methods")} className={`rounded-xl px-4 py-3 text-sm font-bold ${active === "methods" ? "bg-navy text-white" : "text-slate-500"}`}>Deposit methods</button>
     </div>
     {active === "flash" && <FlashAdminPage />}
     {active === "coins" && <CoinLibraryPage />}
     {active === "stocks" && <StockLibraryPage />}
+    {active === "methods" && <DepositMethodsPage embedded />}
   </div>;
 }
 

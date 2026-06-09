@@ -8,13 +8,13 @@ import { CryptoInvestmentPage, EarningsPage, FlashInvestmentPage, InvestmentsPag
 import { AdminInvestmentsPage, InvestmentLibraryPage } from "./pages/AdminInvestmentPages";
 import { CompanyPage, KycPage, NotificationsPage, SupportPage } from "./pages/EnterpriseUserPages";
 import {
-  AnalyticsPage, AnnouncementsAdminPage, CompanyAdminPage, ContentAdminPage,
-  KycReviewPage, PlatformSettingsPage, TestimonialsAdminPage,
+  AnalyticsPage, AnnouncementsAdminPage, KycReviewPage,
 } from "./pages/EnterpriseAdminPages";
 import {
-  AdminDashboard, AdminReferralsPage, ApprovalsAdminPage, DepositMethodsPage,
-  OnboardingLinksPage, PlatformBrandingPage, UsersAdminPage,
+  AdminDashboard, AdminReferralsPage, ApprovalsAdminPage,
+  OnboardingLinksPage, UsersAdminPage,
 } from "./pages/AdminPages";
+import { CompanySettingsPage } from "./pages/CompanySettingsPage";
 import { UserControlCenter } from "./pages/AdminUserDetail";
 import { AdminSupportInbox } from "./pages/AdminSupportInbox";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -90,7 +90,7 @@ export default function App() {
           <Route path="/admin/approvals" element={<ApprovalsAdminPage />} />
           <Route path="/admin/deposits" element={<Navigate to="/admin/approvals" replace />} />
           <Route path="/admin/withdrawals" element={<Navigate to="/admin/approvals" replace />} />
-          <Route path="/admin/methods" element={<DepositMethodsPage />} />
+          <Route path="/admin/methods" element={<Navigate to="/admin/investment-library" replace />} />
           <Route path="/admin/referrals" element={<AdminReferralsPage />} />
           <Route path="/admin/kyc" element={<KycReviewPage />} />
           <Route path="/admin/support" element={<AdminSupportInbox />} />
@@ -112,18 +112,19 @@ export default function App() {
           <Route path="/superadmin/approvals" element={<ApprovalsAdminPage />} />
           <Route path="/superadmin/deposits" element={<Navigate to="/superadmin/approvals" replace />} />
           <Route path="/superadmin/withdrawals" element={<Navigate to="/superadmin/approvals" replace />} />
-          <Route path="/superadmin/methods" element={<DepositMethodsPage />} />
+          <Route path="/superadmin/methods" element={<Navigate to="/superadmin/investment-library" replace />} />
           <Route path="/superadmin/referrals" element={<AdminReferralsPage />} />
           <Route path="/superadmin/onboarding-links" element={<OnboardingLinksPage />} />
-          <Route path="/superadmin/branding" element={<PlatformBrandingPage />} />
+          <Route path="/superadmin/company-settings" element={<CompanySettingsPage />} />
+          <Route path="/superadmin/branding" element={<Navigate to="/superadmin/company-settings" replace />} />
           <Route path="/superadmin/kyc" element={<KycReviewPage />} />
           <Route path="/superadmin/support" element={<AdminSupportInbox />} />
           <Route path="/superadmin/announcements" element={<AnnouncementsAdminPage />} />
           <Route path="/superadmin/analytics" element={<AnalyticsPage superAdmin />} />
-          <Route path="/superadmin/testimonials" element={<TestimonialsAdminPage />} />
-          <Route path="/superadmin/company" element={<CompanyAdminPage />} />
-          <Route path="/superadmin/content" element={<ContentAdminPage />} />
-          <Route path="/superadmin/platform-settings" element={<PlatformSettingsPage />} />
+          <Route path="/superadmin/testimonials" element={<Navigate to="/superadmin/company-settings" replace />} />
+          <Route path="/superadmin/company" element={<Navigate to="/superadmin/company-settings" replace />} />
+          <Route path="/superadmin/content" element={<Navigate to="/superadmin/company-settings" replace />} />
+          <Route path="/superadmin/platform-settings" element={<Navigate to="/superadmin/company-settings" replace />} />
         </Route>
       </Route>
 

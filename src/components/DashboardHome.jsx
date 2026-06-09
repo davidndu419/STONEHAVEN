@@ -10,7 +10,13 @@ import { calculateLiveLockedBalance, calculateTotalLockedBalance, calculateTotal
 import { InvestmentCard, money } from "./InvestmentUI";
 import { PageHeader, StatusBadge } from "./UI";
 
-const date = (value) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+const dateTime = (value) => new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+}).format(new Date(value));
 
 export default function DashboardHome() {
   const { user } = useAuth();
@@ -117,7 +123,7 @@ export default function DashboardHome() {
 
       <section className="glass-card overflow-hidden">
         <div className="flex items-center justify-between border-b border-slate-100 p-5"><div><p className="section-kicker">Recent activity</p><h2 className="display-title mt-1 text-2xl text-navy">Transactions</h2></div><button onClick={() => navigate("/dashboard/transactions")} className="text-xs font-bold text-gold">View all</button></div>
-        {transactions.length ? <div className="divide-y divide-slate-100">{transactions.map((item) => <div key={item.id} className="flex items-center justify-between gap-4 px-5 py-4"><div className="min-w-0"><p className="truncate text-sm font-bold text-navy">{item.label}</p><p className="mt-1 text-xs text-slate-400">{date(item.createdAt)}</p></div><div className="text-right"><p className="text-sm font-bold text-navy">{money(item.amount)}</p><StatusBadge status={item.status} /></div></div>)}</div> : <p className="p-6 text-sm text-slate-400">No transactions yet.</p>}
+        {transactions.length ? <div className="divide-y divide-slate-100">{transactions.map((item) => <div key={item.id} className="flex items-center justify-between gap-4 px-5 py-4"><div className="min-w-0"><p className="truncate text-sm font-bold text-navy">{item.label}</p><p className="mt-1 text-xs text-slate-400">{dateTime(item.createdAt)}</p></div><div className="text-right"><p className="text-sm font-bold text-navy">{money(item.amount)}</p><StatusBadge status={item.status} /></div></div>)}</div> : <p className="p-6 text-sm text-slate-400">No transactions yet.</p>}
       </section>
 
       {announcement && <section className="flex items-start justify-between gap-4 rounded-2xl border border-gold/30 bg-gradient-to-r from-gold/10 to-white p-5"><div className="flex gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gold text-navy"><BellRing size={19} /></span><div><p className="font-display text-lg font-bold text-navy">{announcement.title}</p><p className="mt-1 text-xs leading-5 text-slate-500">{announcement.message}</p></div></div><button onClick={() => setAnnouncement(null)} className="text-xs font-bold text-gold">Dismiss</button></section>}
