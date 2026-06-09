@@ -10,6 +10,8 @@ import { uploadToCloudinary } from "../lib/cloudinary";
 import { EmptyState, PageHeader, StatusBadge } from "../components/UI";
 import { TradingViewChart } from "../components/TradingViewWidget";
 import { InvestmentCard } from "../components/InvestmentUI";
+import { CryptoDepositQRCode } from "../components/CryptoDepositQRCode";
+import { ClipboardButton } from "../components/ClipboardButton";
 import { processInvestmentTimers } from "../lib/investmentEngine";
 import { getPlatformSettings } from "../lib/enterprise";
 import { requestWithdrawalIntent, submitDepositIntent } from "../lib/securityApi";
@@ -266,14 +268,37 @@ export function UserDashboard() {
 
 export function DepositPage() {
   const { user } = useAuth();
-  const [methods, setMethods] = useState([]); const [selected, setSelected] = useState(null);
-  const [amount, setAmount] = useState(""); const [hash, setHash] = useState(""); const [file, setFile] = useState(null);
-  const [busy, setBusy] = useState(false); const [done, setDone] = useState(false); const [error, setError] = useState("");
+  const [methods, setMethods] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [amount, setAmount] = useState("");
+  const [hash, setHash] = useState("");
+  const [file, setFile] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
   const reference = useMemo(() => `SH-${user?.userId?.slice(-6).toUpperCase()}-WALLET-${Date.now().toString().slice(-6)}`, [user]);
-  useEffect(() => { dataService.list("depositMethods", user.adminId).then((items) => { const active = items.filter((item) => item.active); setMethods(active); setSelected(active[0] || null); }); }, [user.adminId]);
+
+  useEffect(() => {
+    dataService.list("depositMethods", user.adminId).then((items) => {
+      const active = items.filter((item) => item.active);
+      setMethods(active);
+      setSelected(active[0] || null);
+    });
+  }, [user.adminId]);
 
   async function submit(event) {
     event.preventDefault();
+    if (!selected) {
+      setError("Please select a deposit method.");
+      return;
+    }
+    const isCrypto = selected.type === "Crypto" || selected.methodType === "crypto";
+    if (isCrypto) {
+      if (!hash.trim()) {
+        setError("Transaction hash / reference is required for crypto deposits.");
+        return;
+      }
+    }
     setBusy(true); setError("");
     try {
       const proofUrl = file ? await uploadToCloudinary(file) : "";
@@ -311,19 +336,138 @@ export function DepositPage() {
       setDone(true);
     } catch (err) { setError(err.message); } finally { setBusy(false); }
   }
+
   if (done) return <div><PageHeader eyebrow="Wallet funding" title="Deposit submitted" /><div className="glass-card mx-auto max-w-xl p-10 text-center"><CheckCircle2 className="mx-auto text-forest" size={46} /><h2 className="display-title mt-5 text-3xl text-navy">Awaiting administrator review</h2><p className="mt-3 text-sm leading-6 text-slate-500">After approval, this deposit will be credited to your available balance. Reference: <strong>{reference}</strong>.</p><button onClick={() => { setDone(false); setAmount(""); setHash(""); setFile(null); }} className="btn-primary mt-7">Deposit more funds</button></div></div>;
+
+  const isCrypto = selected?.type === "Crypto" || selected?.methodType === "crypto";
+
   return (
     <div><PageHeader eyebrow="Wallet funding" title="Deposit Funds" description="Add money to your wallet. This deposit is not tied to an investment plan." />
       {!methods.length ? <EmptyState icon={Landmark} title="No funding methods available" text="Your account administrator has not activated a deposit method yet." /> :
       <div className="grid gap-6 lg:grid-cols-[.8fr_1.2fr]">
-        <div className="space-y-3">{methods.map((method) => <button key={method.id} onClick={() => setSelected(method)} className={`glass-card w-full p-5 text-left transition ${selected?.id === method.id ? "border-gold ring-4 ring-gold/10" : ""}`}><div className="flex items-center gap-4"><span className="grid h-11 w-11 place-items-center overflow-hidden rounded-xl bg-navy text-gold">{method.iconUrl ? <img src={method.iconUrl} className="h-full w-full object-cover" /> : <Landmark size={20} />}</span><div><p className="font-bold text-navy">{method.name}</p><p className="mt-1 text-xs text-slate-400">{method.type} · {method.label}</p></div></div></button>)}</div>
+        <div className="space-y-3">
+          {methods.map((method) => (
+            <button 
+              key={method.id} 
+              onClick={() => setSelected(method)} 
+              className={`glass-card w-full p-5 text-left transition ${selected?.id === method.id ? "border-gold ring-4 ring-gold/10" : ""}`}
+            >
+              <div className="flex items-center gap-4">
+                <span className="grid h-11 w-11 place-items-center overflow-hidden rounded-xl bg-navy text-gold">
+                  {method.iconUrl ? <img src={method.iconUrl} className="h-full w-full object-cover" /> : <Landmark size={20} />}
+                </span>
+                <div>
+                  <p className="font-bold text-navy">{method.name || method.methodName}</p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    {method.type || method.methodType} · {method.label}
+                    {method.network ? ` · ${method.network}` : ""}
+                  </p>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+
         <form onSubmit={submit} className="glass-card p-6 md:p-8">
           {error && <div className="mb-5 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-          <div className="rounded-xl bg-navy p-5 text-white"><p className="text-[10px] uppercase tracking-widest text-white/35">Send payment to</p><div className="mt-3 flex items-center justify-between gap-3"><code className="break-all text-sm text-gold">{selected?.details}</code><button type="button" onClick={() => navigator.clipboard.writeText(selected?.details)} className="shrink-0 rounded-lg bg-white/10 p-2"><Copy size={16} /></button></div><p className="mt-4 text-xs leading-5 text-white/45">{selected?.extraInfo}</p></div>
-          <div className="mt-5"><label className="label">Deposit reference</label><div className="relative"><input className="field bg-slate-50 pr-12" readOnly value={reference} /><Clipboard className="absolute right-4 top-3.5 text-slate-400" size={18} /></div></div>
-          <div className="mt-5 grid gap-5 sm:grid-cols-2"><div><label className="label">Amount sent (USD)</label><input className="field" type="number" min="1" required value={amount} onChange={(e) => setAmount(e.target.value)} /></div><div><label className="label">Transaction hash / reference</label><input className="field" required value={hash} onChange={(e) => setHash(e.target.value)} /></div></div>
-          <label className="mt-5 block cursor-pointer rounded-xl border-2 border-dashed border-slate-200 p-6 text-center hover:border-gold"><Upload className="mx-auto text-gold" size={24} /><p className="mt-3 text-sm font-bold text-navy">{file ? file.name : "Upload payment proof (Optional)"}</p><p className="mt-1 text-xs text-slate-400">PNG, JPG, or WEBP</p><input hidden type="file" accept="image/*" onChange={(e) => setFile(e.target.files[0])} /></label>
-          <button disabled={busy} className="btn-primary mt-6 w-full">{busy ? "Submitting securely..." : "Submit Wallet Deposit"} <ArrowDownToLine size={17} /></button>
+          
+          {isCrypto ? (
+            <div className="mb-6 rounded-2xl border border-slate-100 bg-navy p-5 text-white">
+              <p className="text-[10px] font-bold uppercase tracking-[.25em] text-gold">Crypto Deposit Details</p>
+              
+              <div className="mt-5 flex flex-col md:flex-row gap-6 items-center md:items-start justify-between">
+                {/* QR Code on top for mobile, on the right for desktop */}
+                <div className="shrink-0 flex justify-center w-full md:w-auto md:order-2">
+                  <CryptoDepositQRCode 
+                    address={selected.details || selected.address} 
+                    methodName={selected.name} 
+                    network={selected.network} 
+                  />
+                </div>
+
+                {/* Details below QR code on mobile, on the left for desktop */}
+                <div className="flex-1 space-y-4 w-full text-center md:text-left md:order-1">
+                  <div>
+                    <span className="text-[9px] uppercase tracking-widest text-white/40 font-bold block">Method Name</span>
+                    <span className="text-base font-bold text-white block mt-0.5">{selected.name || selected.methodName}</span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] uppercase tracking-widest text-white/40 font-bold block">Network / Chain</span>
+                    <span className="inline-block mt-1 bg-white/10 px-3 py-1 rounded-lg text-xs font-bold text-gold uppercase tracking-wide">
+                      {selected.network || "Not Specified"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] uppercase tracking-widest text-white/40 font-bold block">Wallet Address</span>
+                    <code className="block mt-1 font-mono text-xs text-gold break-all bg-white/[0.06] p-3 rounded-xl border border-white/10 select-all max-w-full text-center md:text-left">
+                      {selected.details || selected.address}
+                    </code>
+                  </div>
+                  <div className="pt-2">
+                    <ClipboardButton 
+                      text={selected.details || selected.address} 
+                      className="w-full md:w-auto" 
+                      label="Copy Wallet Address" 
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Warning box */}
+              <div className="mt-5 rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-xs leading-5 text-red-200 text-left">
+                <strong>Warning:</strong> Send only the selected asset/network to this address. Sending the wrong asset or network may result in permanent loss.
+              </div>
+
+              {selected.extraInfo && (
+                <p className="mt-4 text-xs leading-5 text-white/45 text-left border-t border-white/10 pt-4">
+                  {selected.extraInfo}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-xl bg-navy p-5 text-white mb-6">
+              <p className="text-[10px] uppercase tracking-widest text-white/35">Send payment to</p>
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <code className="break-all text-sm text-gold">{selected?.details || selected?.address}</code>
+                <ClipboardButton 
+                  text={selected?.details || selected?.address} 
+                  label="Copy" 
+                  className="shrink-0 bg-white/10 border-white/20 text-white hover:bg-white/20" 
+                />
+              </div>
+              <p className="mt-4 text-xs leading-5 text-white/45">{selected?.extraInfo}</p>
+            </div>
+          )}
+
+          <div className="mt-5">
+            <label className="label">Deposit reference</label>
+            <div className="flex gap-2">
+              <input className="field bg-slate-50 font-mono text-navy font-bold" readOnly value={reference} />
+              <ClipboardButton text={reference} label="Copy Ref" />
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-5 sm:grid-cols-2">
+            <div>
+              <label className="label">Amount sent (USD)</label>
+              <input className="field" type="number" min="1" required value={amount} onChange={(e) => setAmount(e.target.value)} />
+            </div>
+            <div>
+              <label className="label">Transaction hash / reference</label>
+              <input className="field" required={isCrypto} value={hash} onChange={(e) => setHash(e.target.value)} />
+            </div>
+          </div>
+
+          <label className="mt-5 block cursor-pointer rounded-xl border-2 border-dashed border-slate-200 p-6 text-center hover:border-gold">
+            <Upload className="mx-auto text-gold" size={24} />
+            <p className="mt-3 text-sm font-bold text-navy">{file ? file.name : "Upload payment proof (Optional)"}</p>
+            <p className="mt-1 text-xs text-slate-400">PNG, JPG, or WEBP</p>
+            <input hidden type="file" accept="image/*" onChange={(e) => setFile(e.target.files[0])} />
+          </label>
+          
+          <button disabled={busy} className="btn-primary mt-6 w-full">
+            {busy ? "Submitting securely..." : "Submit Wallet Deposit"} <ArrowDownToLine size={17} />
+          </button>
         </form>
       </div>}
     </div>

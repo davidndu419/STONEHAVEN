@@ -226,7 +226,7 @@ service cloud.firestore {
           "activeElapsedSeconds", "lockedEarned", "lastActivatedAt",
           "totalPausedSeconds", "lastLockedCalculationAt", "currentWeek",
           "updatedBy", "archived", "archivedAt", "archivedBy",
-          "completedBy"
+          "completedBy", "declinedAt", "declinedBy", "declineReason"
         ])
       ) || (
         ownsRecord()
@@ -409,7 +409,8 @@ service cloud.firestore {
         && ownsAdminScope(request.resource.data.adminId)
         && request.resource.data.keys().hasOnly([
           "adminId", "name", "type", "label", "details", "extraInfo",
-          "active", "iconUrl", "createdAt"
+          "active", "iconUrl", "createdAt", "updatedAt", "methodName",
+          "methodType", "network", "address", "status"
         ])
         && request.resource.data.name is string
         && request.resource.data.active is bool;
@@ -417,7 +418,8 @@ service cloud.firestore {
         && request.resource.data.adminId == resource.data.adminId
         && request.resource.data.keys().hasOnly([
           "adminId", "name", "type", "label", "details", "extraInfo",
-          "active", "iconUrl", "createdAt"
+          "active", "iconUrl", "createdAt", "updatedAt", "methodName",
+          "methodType", "network", "address", "status"
         ]);
       allow delete: if scopedRecord();
     }

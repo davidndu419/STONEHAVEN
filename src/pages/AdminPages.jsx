@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowDownToLine, ArrowUpFromLine, Check, CircleDollarSign, CreditCard,
-  Link2, Plus, RefreshCw, ShieldCheck, Trash2, Upload, UserPlus, Users,
+  Link2, Plus, RefreshCw, ShieldCheck, Trash2, Upload, UserPlus, Users, Pencil
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { dataService } from "../lib/dataService";
@@ -220,16 +220,215 @@ export function ApprovalsAdminPage() {
 }
 
 export function DepositMethodsPage({ embedded = false }) {
-  const { user } = useAuth(); const { items, load } = useAdminData("depositMethods"); const [open, setOpen] = useState(false); const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ name: "", type: "Crypto", label: "", details: "", extraInfo: "", active: true, file: null });
-  async function create(event) { event.preventDefault(); setBusy(true); const iconUrl = await uploadToCloudinary(form.file); await dataService.create("depositMethods", { adminId: user.adminId === "GLOBAL" ? "HERITAGE-HQ" : user.adminId, name: form.name, type: form.type, label: form.label, details: form.details, extraInfo: form.extraInfo, active: form.active, iconUrl }); setBusy(false); setOpen(false); load(); }
-  async function toggle(item) { await dataService.update("depositMethods", item.id, { active: !item.active }); load(); }
-  async function remove(item) { if (window.confirm(`Delete ${item.name}?`)) { await dataService.remove("depositMethods", item.id); load(); } }
+  const { user } = useAuth();
+  const { items, load } = useAdminData("depositMethods");
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [form, setForm] = useState({ name: "", type: "Crypto", label: "", details: "", network: "", extraInfo: "", active: true, file: null });
+
+  function startCreate() {
+    setEditingItem(null);
+    setForm({ name: "", type: "Crypto", label: "", details: "", network: "", extraInfo: "", active: true, file: null });
+    setOpen(true);
+  }
+
+  function startEdit(item) {
+    setEditingItem(item);
+    setForm({
+      name: item.name || item.methodName || "",
+      type: item.type || item.methodType || "Crypto",
+      label: item.label || "",
+      details: item.details || item.address || "",
+      network: item.network || "",
+      extraInfo: item.extraInfo || "",
+      active: item.active ?? true,
+      file: null
+    });
+    setOpen(true);
+  }
+
+  async function save(event) {
+    event.preventDefault();
+    if (form.type === "Crypto") {
+      if (!form.details || !form.details.trim()) {
+        window.alert("Wallet address is required for Crypto methods.");
+        return;
+      }
+      if (!form.network) {
+        window.alert("Network / chain is required for Crypto methods.");
+        return;
+      }
+      if (form.details.trim().length < 20) {
+        window.alert("Wallet address must be at least 20 characters.");
+        return;
+      }
+    }
+
+    setBusy(true);
+    try {
+      let iconUrl = editingItem?.iconUrl || "";
+      if (form.file) {
+        iconUrl = await uploadToCloudinary(form.file);
+      }
+
+      const payload = {
+        name: form.name,
+        methodName: form.name,
+        type: form.type,
+        methodType: form.type.toLowerCase(),
+        label: form.label,
+        details: form.details,
+        address: form.details,
+        network: form.type === "Crypto" ? form.network : "",
+        extraInfo: form.extraInfo,
+        active: form.active,
+        status: form.active ? "Active" : "Inactive",
+        iconUrl,
+        updatedAt: new Date().toISOString()
+      };
+
+      if (editingItem) {
+        await dataService.update("depositMethods", editingItem.id, payload);
+      } else {
+        await dataService.create("depositMethods", {
+          adminId: user.adminId === "GLOBAL" ? "HERITAGE-HQ" : user.adminId,
+          ...payload,
+          createdAt: new Date().toISOString()
+        });
+      }
+      setOpen(false);
+      load();
+    } catch (err) {
+      window.alert(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggle(item) {
+    const nextActive = !item.active;
+    await dataService.update("depositMethods", item.id, {
+      active: nextActive,
+      status: nextActive ? "Active" : "Inactive"
+    });
+    load();
+  }
+
+  async function remove(item) {
+    if (window.confirm(`Delete ${item.name || item.methodName}?`)) {
+      await dataService.remove("depositMethods", item.id);
+      load();
+    }
+  }
+
   return (
-    <div>{!embedded && <PageHeader eyebrow="Funding configuration" title="Deposit methods" description="Manage the payment addresses and accounts visible to clients in your administrative scope." action={<button onClick={() => setOpen(true)} className="btn-primary"><Plus size={16} /> Add method</button>} />}
-      {embedded && <div className="mb-5 flex justify-end"><button onClick={() => setOpen(true)} className="btn-primary"><Plus size={16} /> Add method</button></div>}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{items.map((item) => <div key={item.id} className="glass-card p-6"><div className="flex items-start justify-between"><span className="grid h-12 w-12 place-items-center overflow-hidden rounded-xl bg-navy text-gold">{item.iconUrl ? <img src={item.iconUrl} className="h-full w-full object-cover" /> : <CreditCard />}</span><StatusBadge status={item.active ? "active" : "suspended"} /></div><h3 className="display-title mt-6 text-2xl text-navy">{item.name}</h3><p className="mt-1 text-xs text-slate-400">{item.type} · {item.label}</p><code className="mt-5 block break-all rounded-xl bg-stone p-3 text-xs text-slate-600">{item.details}</code><div className="mt-5 flex gap-2"><button onClick={() => toggle(item)} className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold">{item.active ? "Deactivate" : "Activate"}</button><button onClick={() => remove(item)} className="rounded-xl bg-red-50 p-2.5 text-red-600"><Trash2 size={16} /></button></div></div>)}</div>
-      <Modal open={open} onClose={() => setOpen(false)} title="Add deposit method"><form onSubmit={create} className="space-y-4"><div className="grid gap-4 sm:grid-cols-2"><div><label className="label">Method name</label><input className="field" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div><div><label className="label">Type</label><select className="field" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}><option>Crypto</option><option>Bank</option><option>Mobile Money</option><option>Other</option></select></div></div><div><label className="label">Display label</label><input className="field" required value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} /></div><div><label className="label">Address / account details</label><textarea className="field min-h-24" required value={form.details} onChange={(e) => setForm({ ...form, details: e.target.value })} /></div><div><label className="label">Additional instructions</label><textarea className="field min-h-20" value={form.extraInfo} onChange={(e) => setForm({ ...form, extraInfo: e.target.value })} /></div><label className="block cursor-pointer rounded-xl border-2 border-dashed border-slate-200 p-5 text-center"><Upload className="mx-auto text-gold" /><span className="mt-2 block text-xs font-bold text-navy">{form.file ? form.file.name : "Upload method icon"}</span><input hidden type="file" accept="image/*" onChange={(e) => setForm({ ...form, file: e.target.files[0] })} /></label><button disabled={busy} className="btn-primary w-full">{busy ? "Saving..." : "Save deposit method"}</button></form></Modal>
+    <div>
+      {!embedded && <PageHeader eyebrow="Funding configuration" title="Deposit methods" description="Manage the payment addresses and accounts visible to clients in your administrative scope." action={<button onClick={startCreate} className="btn-primary"><Plus size={16} /> Add method</button>} />}
+      {embedded && <div className="mb-5 flex justify-end"><button onClick={startCreate} className="btn-primary"><Plus size={16} /> Add method</button></div>}
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {items.map((item) => (
+          <div key={item.id} className="glass-card p-6">
+            <div className="flex items-start justify-between">
+              <span className="grid h-12 w-12 place-items-center overflow-hidden rounded-xl bg-navy text-gold">
+                {item.iconUrl ? <img src={item.iconUrl} className="h-full w-full object-cover" /> : <CreditCard />}
+              </span>
+              <StatusBadge status={item.active ? "active" : "suspended"} />
+            </div>
+            <h3 className="display-title mt-6 text-2xl text-navy">{item.name || item.methodName}</h3>
+            <p className="mt-1 text-xs text-slate-400">
+              {item.type || item.methodType} · {item.label}
+              {item.network ? ` · ${item.network}` : ""}
+            </p>
+            <code className="mt-5 block break-all rounded-xl bg-stone p-3 text-xs text-slate-600">
+              {item.details || item.address}
+            </code>
+            <div className="mt-5 flex gap-2">
+              <button onClick={() => toggle(item)} className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold hover:bg-slate-50">
+                {item.active ? "Deactivate" : "Activate"}
+              </button>
+              <button onClick={() => startEdit(item)} className="rounded-xl bg-slate-50 p-2.5 text-navy hover:bg-slate-100 hover:text-gold" title="Edit method">
+                <Pencil size={16} />
+              </button>
+              <button onClick={() => remove(item)} className="rounded-xl bg-red-50 p-2.5 text-red-600 hover:bg-red-100" title="Delete method">
+                <Trash2 size={16} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <Modal open={open} onClose={() => setOpen(false)} title={editingItem ? "Edit deposit method" : "Add deposit method"}>
+        <form onSubmit={save} className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="label">Method name</label>
+              <input className="field" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Type</label>
+              <select className="field" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value, network: e.target.value === "Crypto" ? form.network : "" })}>
+                <option value="Crypto">Crypto</option>
+                <option value="Bank">Bank</option>
+                <option value="Mobile Money">Mobile Money</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="label">Display label</label>
+              <input className="field" required value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Status</label>
+              <select className="field" value={form.active ? "true" : "false"} onChange={(e) => setForm({ ...form, active: e.target.value === "true" })}>
+                <option value="true">Active</option>
+                <option value="false">Inactive</option>
+              </select>
+            </div>
+          </div>
+
+          {form.type === "Crypto" && (
+            <div>
+              <label className="label">Network / Chain</label>
+              <select className="field" required={form.type === "Crypto"} value={form.network} onChange={(e) => setForm({ ...form, network: e.target.value })}>
+                <option value="">Select Network / Chain</option>
+                <option value="Bitcoin">Bitcoin</option>
+                <option value="Ethereum">Ethereum</option>
+                <option value="BNB Smart Chain">BNB Smart Chain</option>
+                <option value="USDT TRC20">USDT TRC20</option>
+                <option value="USDT ERC20">USDT ERC20</option>
+                <option value="Solana">Solana</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+          )}
+
+          <div>
+            <label className="label">
+              {form.type === "Crypto" ? "Wallet Address" : "Address / Account Details"}
+            </label>
+            <textarea className="field min-h-24" required value={form.details} onChange={(e) => setForm({ ...form, details: e.target.value })} />
+          </div>
+
+          <div>
+            <label className="label">Additional instructions</label>
+            <textarea className="field min-h-20" value={form.extraInfo} onChange={(e) => setForm({ ...form, extraInfo: e.target.value })} />
+          </div>
+
+          <label className="block cursor-pointer rounded-xl border-2 border-dashed border-slate-200 p-5 text-center hover:border-gold">
+            <Upload className="mx-auto text-gold" />
+            <span className="mt-2 block text-xs font-bold text-navy">{form.file ? form.file.name : "Upload method icon (Optional)"}</span>
+            <input hidden type="file" accept="image/*" onChange={(e) => setForm({ ...form, file: e.target.files[0] })} />
+          </label>
+
+          <button disabled={busy} className="btn-primary w-full">
+            {busy ? "Saving..." : editingItem ? "Update deposit method" : "Save deposit method"}
+          </button>
+        </form>
+      </Modal>
     </div>
   );
 }
