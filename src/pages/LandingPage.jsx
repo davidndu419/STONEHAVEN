@@ -124,10 +124,14 @@ export default function LandingPage() {
 
       <section id="about" className="px-5 py-28">
         <div className="mx-auto max-w-7xl">
-          <SectionTitle kicker="One institution, two markets" title="A considered approach to modern opportunity." text="Access curated digital asset and global equity strategies through one refined client experience." center />
-          <div className="mt-14 grid gap-6 md:grid-cols-2">
-            {[["Digital Asset Desk", "Navigate established crypto markets with structured plans, transparent milestones, and institutional-grade charting.", "BTC · ETH · SOL", TrendingUp], ["Global Equity Desk", "Build exposure to leading public companies through focused plans and research-led portfolio views.", "AAPL · NVDA · MSFT", BarChart3]].map(([title, text, assets, Icon], index) => (
-              <div key={title} className={`group relative overflow-hidden rounded-2xl p-8 text-white shadow-heritage md:p-11 ${index ? "bg-charcoal" : "bg-navy"}`}>
+          <SectionTitle kicker="One institution, three markets" title="A refined approach to digital assets, equities, and flash opportunities." text="Access curated flash investments, digital assets, and global equities through one refined client experience." center />
+          <div className="mt-14 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {[
+              ["Flash Investment Desk", "Access short-duration investment opportunities with structured timelines, transparent milestones, and maturity-based returns.", "FLASH · SHORT TERM · FIXED DURATION", Zap],
+              ["Digital Asset Desk", "Navigate established crypto markets with structured plans, transparent milestones, and institutional-grade tracking.", "BTC · ETH · SOL", TrendingUp],
+              ["Global Equity Desk", "Explore selected global equity opportunities through curated stock-linked investment plans and portfolio tracking.", "AAPL · NVDA · MSFT", BarChart3]
+            ].map(([title, text, assets, Icon], index) => (
+              <div key={title} className={`group relative overflow-hidden rounded-2xl p-8 text-white shadow-heritage md:p-11 ${index % 2 === 0 ? "bg-navy" : "bg-charcoal"}`}>
                 <div className="absolute right-0 top-0 h-52 w-52 rounded-full bg-gold/10 blur-3xl" />
                 <Icon size={34} strokeWidth={1.4} className="text-gold" />
                 <h3 className="display-title mt-12 text-3xl">{title}</h3><p className="mt-4 max-w-md text-sm leading-7 text-white/55">{text}</p>
