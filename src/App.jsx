@@ -7,7 +7,8 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { FundInvestmentPage } from "./pages/FundingPages";
 import { CryptoInvestmentPage, EarningsPage, FlashInvestmentPage, InvestmentsPage, PortfolioPage, StockInvestmentPage, StockResearchPage } from "./pages/InvestmentPages";
 import { AdminInvestmentsPage, InvestmentLibraryPage } from "./pages/AdminInvestmentPages";
-import { CompanyPage, KycPage, NotificationsPage, SupportPage } from "./pages/EnterpriseUserPages";
+import { KycPage, NotificationsPage, SupportPage } from "./pages/EnterpriseUserPages";
+import { CompactCompanyPage } from "./pages/CompactCompanyPage";
 import {
   AnalyticsPage, AnnouncementsAdminPage, KycReviewPage,
 } from "./pages/EnterpriseAdminPages";
@@ -52,7 +53,7 @@ export default function App() {
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/terms" element={<LegalPage />} />
       <Route path="/privacy" element={<LegalPage privacy />} />
-      <Route path="/company" element={<CompanyPage />} />
+      <Route path="/company" element={<CompactCompanyPage />} />
 
       <Route element={<ProtectedRoute roles={["user"]} />}>
         <Route path="/onboarding" element={<OnboardingPage />} />

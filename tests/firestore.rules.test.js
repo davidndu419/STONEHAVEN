@@ -113,6 +113,21 @@ beforeEach(async () => {
         sourceId: "deposit-a",
         createdAt: "2026-06-09T10:00:00.000Z",
       }),
+      setDoc(doc(db, "investmentCalculatorPlans", "active-calculator"), {
+        planName: "Crypto Growth",
+        status: "Active",
+        displayOrder: 1,
+      }),
+      setDoc(doc(db, "investmentCalculatorPlans", "inactive-calculator"), {
+        planName: "Hidden Plan",
+        status: "Inactive",
+        displayOrder: 2,
+      }),
+      setDoc(doc(db, "landingInvestmentPlans", "active-card"), {
+        weeklyCapital: 200,
+        status: "Active",
+        displayOrder: 1,
+      }),
     ]);
   });
 });
@@ -480,5 +495,45 @@ describe("suspended accounts", () => {
       userUnread: false,
       createdAt: "2026-01-01T00:00:00.000Z",
     }));
+  });
+});
+
+describe("public landing content", () => {
+  test("public visitors can read active records but not inactive records", async () => {
+    const db = environment.unauthenticatedContext().firestore();
+    await assertSucceeds(getDoc(doc(db, "investmentCalculatorPlans", "active-calculator")));
+    await assertSucceeds(getDoc(doc(db, "landingInvestmentPlans", "active-card")));
+    await assertFails(getDoc(doc(db, "investmentCalculatorPlans", "inactive-calculator")));
+  });
+
+  test("normal users cannot modify landing content", async () => {
+    const db = environment.authenticatedContext("user-a", {
+      role: "user",
+      adminId: "ADMIN-A",
+    }).firestore();
+    await assertFails(updateDoc(doc(db, "investmentCalculatorPlans", "active-calculator"), {
+      projectedReturn: 999999,
+    }));
+    await assertFails(addDoc(collection(db, "landingInvestmentPlans"), {
+      weeklyCapital: 500,
+      status: "Active",
+      displayOrder: 2,
+    }));
+  });
+
+  test("super admin can manage both landing collections", async () => {
+    const db = environment.authenticatedContext("super", {
+      role: "superadmin",
+      adminId: "GLOBAL",
+    }).firestore();
+    await assertSucceeds(updateDoc(doc(db, "investmentCalculatorPlans", "active-calculator"), {
+      projectedReturn: 1000,
+    }));
+    await assertSucceeds(addDoc(collection(db, "landingInvestmentPlans"), {
+      weeklyCapital: 500,
+      status: "Active",
+      displayOrder: 2,
+    }));
+    await assertSucceeds(deleteDoc(doc(db, "landingInvestmentPlans", "active-card")));
   });
 });

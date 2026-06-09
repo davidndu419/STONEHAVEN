@@ -7,12 +7,8 @@ import {
 import { Brand } from "../components/UI";
 import { TradingViewTicker } from "../components/TradingViewWidget";
 import { LiveActivityFeed, TestimonialToast } from "../components/LandingEnterprise";
+import { ManagedInvestmentCalculator, ManagedInvestmentPlans } from "../components/LandingInvestmentContent";
 import { dataService } from "../lib/dataService";
-
-const plans = [
-  [200, 87000, 88000], [300, 87000, 108000], [400, 107000, 128000], [500, 127000, 148000],
-  [600, 147000, 168000], [700, 167000, 188000], [800, 187000, 208000], [1000, 227000, 248000],
-];
 
 const testimonials = [
   ["Amelia R.", "United Kingdom", "Stonehaven brings the clarity and discipline I expected from a private wealth firm."],
@@ -35,19 +31,6 @@ function SectionTitle({ kicker, title, text, center = false }) {
       {text && <p className="mt-4 text-sm leading-7 text-slate-500 md:text-base">{text}</p>}
     </div>
   );
-}
-
-function PublicCalculator() {
-  const [type, setType] = useState("crypto"); const [capital, setCapital] = useState(200); const [duration, setDuration] = useState(3);
-  const weekly = plans.find((item) => item[0] === Number(capital)) || plans[0];
-  const flashPlans = [[50, 80], [100, 150], [200, 300], [300, 450], [500, 700], [1000, 1300]];
-  const flash = flashPlans.find((item) => item[0] === Number(capital)) || flashPlans[0];
-  const weeks = duration === 2 ? 8 : 13;
-  const total = type === "flash" ? flash[0] : weekly[0] * weeks;
-  const projected = type === "flash" ? flash[1] : duration === 2 ? weekly[1] : weekly[2];
-  const profit = projected - total;
-  const options = type === "flash" ? flashPlans.map((item) => item[0]) : plans.map((item) => item[0]);
-  return <section className="bg-navy px-5 py-28 text-white"><div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[.75fr_1.25fr]"><SectionTitle kicker="Investment calculator" title="Model your plan before you begin." text="Calculator values follow the current Stonehaven plan schedule. Final terms are snapshotted when a plan is created." /><div className="dark-glass p-7"><div className="grid gap-4 sm:grid-cols-3"><div><label className="mb-2 block text-[10px] uppercase tracking-widest text-white/35">Plan type</label><select className="w-full rounded-xl border border-white/10 bg-white/[.07] px-4 py-3" value={type} onChange={(e) => { setType(e.target.value); setCapital(e.target.value === "flash" ? 50 : 200); }}><option className="text-navy" value="flash">Flash</option><option className="text-navy" value="crypto">Crypto</option><option className="text-navy" value="stock">Stock</option></select></div><div><label className="mb-2 block text-[10px] uppercase tracking-widest text-white/35">{type === "flash" ? "Capital" : "Weekly capital"}</label><select className="w-full rounded-xl border border-white/10 bg-white/[.07] px-4 py-3" value={capital} onChange={(e) => setCapital(Number(e.target.value))}>{options.map((value) => <option className="text-navy" key={value} value={value}>${value.toLocaleString()}</option>)}</select></div><div><label className="mb-2 block text-[10px] uppercase tracking-widest text-white/35">Duration</label><select disabled={type === "flash"} className="w-full rounded-xl border border-white/10 bg-white/[.07] px-4 py-3 disabled:opacity-50" value={duration} onChange={(e) => setDuration(Number(e.target.value))}>{type === "flash" ? <option className="text-navy">24 hours</option> : <><option className="text-navy" value={2}>2 months</option><option className="text-navy" value={3}>3 months</option></>}</select></div></div><div className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-white/10 sm:grid-cols-4">{[["Total capital", total], ["Projected return", projected], ["Net profit", profit], ["ROI", `${((profit / total) * 100).toFixed(1)}%`]].map(([label, value]) => <div key={label} className="bg-navy p-4"><p className="text-[9px] uppercase tracking-widest text-white/35">{label}</p><p className="mt-2 font-display text-xl font-bold text-gold">{typeof value === "number" ? `$${value.toLocaleString()}` : value}</p></div>)}</div><Link to="/register" className="btn-primary mt-6 w-full">Start earning now <ArrowRight size={16} /></Link></div></div></section>;
 }
 
 export default function LandingPage() {
@@ -155,48 +138,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="plans" className="bg-white px-5 py-28">
-        <div className="mx-auto max-w-6xl">
-          <SectionTitle kicker="Investment plans" title="Clarity at every horizon." text="Select a weekly capital commitment and review the projected maturity value before you begin." />
-          
-          {/* Desktop Plans Table */}
-          <div className="glass-card table-scroll mt-12 overflow-x-auto hidden md:block">
-            <table className="w-full min-w-[620px] text-left">
-              <thead className="bg-navy text-white"><tr><th className="px-7 py-5 text-xs uppercase tracking-widest">Weekly capital</th><th className="px-7 py-5 text-xs uppercase tracking-widest">After 2 months</th><th className="px-7 py-5 text-xs uppercase tracking-widest">After 3 months</th><th className="px-7 py-5" /></tr></thead>
-              <tbody>{plans.map(([capital, two, three]) => <tr key={capital} className="border-b border-slate-100 last:border-0 hover:bg-gold/[.04]"><td className="px-7 py-5 font-bold text-navy">${capital.toLocaleString()}</td><td className="px-7 py-5 text-slate-600">${two.toLocaleString()}</td><td className="px-7 py-5 text-slate-600">${three.toLocaleString()}</td><td className="px-7 py-5 text-right"><Link to="/register" className="text-xs font-bold text-gold">Select plan →</Link></td></tr>)}</tbody>
-            </table>
-          </div>
-
-          {/* Mobile Plans Cards */}
-          <div className="grid gap-4 mt-8 md:hidden">
-            {plans.map(([capital, two, three]) => (
-              <div key={capital} className="glass-card p-5 border border-slate-100 bg-white/70">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Weekly Capital</p>
-                    <p className="font-display text-xl font-bold text-navy">${capital.toLocaleString()}</p>
-                  </div>
-                  <Link to="/register" className="btn-primary min-h-10 px-4 py-2 text-xs">
-                    Select
-                  </Link>
-                </div>
-                <div className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
-                  <div>
-                    <p className="text-[9px] uppercase tracking-wider text-slate-400">2 months (8 wks)</p>
-                    <p className="font-display font-semibold text-slate-700">${two.toLocaleString()}</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] uppercase tracking-wider text-slate-400">3 months (13 wks)</p>
-                    <p className="font-display font-semibold text-slate-700">${three.toLocaleString()}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <p className="mt-4 text-xs leading-5 text-slate-400">Illustrative plan values are subject to the applicable plan agreement and risk disclosures.</p>
-        </div>
-      </section>
+      <ManagedInvestmentPlans />
 
       <section id="how" className="px-5 py-28">
         <div className="mx-auto max-w-7xl">
@@ -207,7 +149,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <PublicCalculator />
+      <ManagedInvestmentCalculator />
 
       <section className="bg-navy px-5 py-28 text-white">
         <div className="mx-auto max-w-7xl">

@@ -49,6 +49,8 @@ function initializeLocal() {
     teamMembers: clone(seedTeamMembers),
     faqs: clone(seedFaqs),
     legalDocuments: clone(seedLegalDocuments),
+    investmentCalculatorPlans: [],
+    landingInvestmentPlans: [],
   };
   if (existing) {
     const current = JSON.parse(existing);
@@ -125,6 +127,13 @@ async function listFirebase(name, filters = []) {
 }
 
 export const dataService = {
+  async listPublic(name) {
+    if (firebaseEnabled) {
+      return listFirebase(name, [["status", "Active"]]);
+    }
+    return (readLocal()[name] || []).filter((item) => item.status === "Active");
+  },
+
   async bootstrapAuthProfile(firebaseUser) {
     if (!firebaseEnabled) return null;
     const controlSnap = await getDoc(doc(db, "accountControls", firebaseUser.uid));

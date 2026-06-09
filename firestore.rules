@@ -585,6 +585,16 @@ service cloud.firestore {
       allow create, update, delete: if isSuperAdmin();
     }
 
+    match /investmentCalculatorPlans/{documentId} {
+      allow read: if resource.data.status == "Active" || isSuperAdmin();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    match /landingInvestmentPlans/{documentId} {
+      allow read: if resource.data.status == "Active" || isSuperAdmin();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
