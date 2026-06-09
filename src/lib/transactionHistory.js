@@ -1,18 +1,19 @@
 import { dataService } from "./dataService";
 
 export async function loadTransactionHistory(userId) {
-  const [transactions, deposits, withdrawals, investments] = await Promise.all([
+  const [transactions, deposits, withdrawals] = await Promise.all([
     dataService.listForUser("transactions", userId).catch(() => []),
     dataService.listForUser("deposits", userId).catch(() => []),
     dataService.listForUser("withdrawals", userId).catch(() => []),
-    dataService.listForUser("investments", userId).catch(() => []),
   ]);
 
-  const requestTransactionTypes = new Set([
-    "deposit", "deposit_submitted", "deposit_approved", "deposit_rejected", "deposit_declined",
-    "balance_funding_submitted", "investment_funding_submitted", "weekly_deposit",
-    "withdrawal", "withdrawal_requested", "withdrawal_approved", "withdrawal_rejected",
-    "withdrawal_declined", "withdrawal_hold", "referral_withdrawal",
+  const allowedUserTransactionTypes = new Set([
+    "referral_bonus_earned",
+    "referral_bonus",
+    "investment_approved",
+    "investment_funding_declined",
+    "investment_completed",
+    "investment_matured",
   ]);
 
   const sourceItems = [
@@ -48,25 +49,14 @@ export async function loadTransactionHistory(userId) {
         declinedAt: item.declinedAt,
       };
     }),
-    ...investments
-      .filter((item) => ["awaiting_funding", "cancelled"].includes(item.status))
-      .map((item) => {
-        const closed = item.status === "cancelled";
-        return {
-        id: `investment-${item.id}`,
-        type: closed ? "investment_closed" : "investment_created",
-        label: `${item.planName || item.ticker || "Investment"} ${closed ? "closed" : "awaiting funding"}`,
-        amount: item.capital || item.weeklyCapital || 0,
-        status: closed ? "closed" : item.status,
-        createdAt: closed ? item.cancelledAt || item.createdAt : item.createdAt,
-      };
-      }),
   ];
 
+  const filteredTransactions = transactions.filter((item) =>
+    item.visibility !== "admin_only" && allowedUserTransactionTypes.has(item.type)
+  );
+
   return [
-    ...transactions.filter((item) =>
-      item.visibility !== "admin_only" && !requestTransactionTypes.has(item.type)
-    ),
+    ...filteredTransactions,
     ...sourceItems,
   ]
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));

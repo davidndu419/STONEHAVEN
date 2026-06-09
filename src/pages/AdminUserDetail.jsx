@@ -13,15 +13,13 @@ import { createNotification } from "../lib/enterprise";
 import { reviewKyc } from "../lib/securityApi";
 import {
   calculateLiveLockedBalance, calculateTotalLockedBalance, calculateTotalPortfolio,
-  snapshotInvestmentProgress,
 } from "../lib/lockedBalance";
-import { approveInvestmentDeposit } from "../lib/investmentEngine";
 import { useCurrency } from "../lib/currency";
-import { reviewFinancialRequest } from "../lib/approvalWorkflow";
+import { approveInvestmentFunding, declineInvestmentFunding, reviewFinancialRequest } from "../lib/approvalWorkflow";
 
 const tabs = [
   "Overview", "Balances", "Investments", "Deposits", "Withdrawals",
-  "Transactions", "Referrals", "KYC", "Support Tickets", "Admin Notes",
+  "Transactions", "Admin History", "Referrals", "KYC", "Support Tickets", "Admin Notes",
 ];
 const now = () => new Date().toISOString();
 const dateTime = (value) => value ? new Date(value).toLocaleString() : "Not recorded";
@@ -61,7 +59,7 @@ function ActionModal({ action, onClose, onSubmit }) {
   return <Modal open title={action.title} onClose={onClose}><form onSubmit={submit} className="space-y-4">
     <p className="text-sm leading-6 text-slate-500">{action.description}</p>
     {action.confirmation && <div className="rounded-xl border border-gold/25 bg-gold/[.07] p-4 text-sm font-semibold leading-6 text-navy">{action.confirmation}</div>}
-    {action.amount && <div><label className="label">{action.amountLabel || "Amount"}</label><input className="field" type="number" min={action.allowZero ? 0 : 0.01} step="0.01" required value={amount} onChange={(event) => setAmount(event.target.value)} /></div>}
+    {action.amount && <div><label className="label">{action.amountLabel || "Amount"}</label><input className="field" type="number" min={action.min ?? (action.allowZero ? 0 : 0.01)} step={action.step ?? "0.01"} required value={amount} onChange={(event) => setAmount(event.target.value)} /></div>}
     {action.message && <div><label className="label">{action.messageLabel || "Message"}</label><textarea className="field min-h-28" required value={message} onChange={(event) => setMessage(event.target.value)} /></div>}
     <div><label className="label">Reason <span className="text-red-500">*</span></label><textarea className="field min-h-28" required value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Record the operational reason for this action." /></div>
     <button disabled={busy || !reason.trim()} className="btn-primary w-full">{busy ? "Saving..." : action.confirmLabel || "Confirm action"}</button>
@@ -159,6 +157,8 @@ export function UserControlCenter() {
     const payload = {
       userId, adminId: profile.adminId, type, label, amount: Number(amount || 0),
       status, reason, adminActorId: actor.userId, adminActorName: actor.name, targetId,
+      visibility: "admin_only",
+      createdAt: now(),
     };
     await Promise.all([
       dataService.log(payload),
@@ -198,7 +198,7 @@ export function UserControlCenter() {
           status: action.status, statusChangedAt: now(), statusChangedBy: actor.userId,
           statusReason: input.reason,
         });
-        await audit(`account_${action.status}`, `Account ${action.status}`, { reason: input.reason, status: action.status });
+        await audit(action.status === "active" ? "user_reactivated" : "user_suspended", `Account ${action.status}`, { reason: input.reason, status: action.status });
         await notify("account", `Account ${action.status}`, input.reason);
       }
       if (action.kind === "balance") {
@@ -210,7 +210,7 @@ export function UserControlCenter() {
         const entry = {
           userId,
           adminId: profile.adminId,
-          type: "manual_balance_adjustment",
+          type: action.direction === "add" ? "manual_balance_credit" : "manual_balance_debit",
           label: action.direction === "add" ? "Available balance added" : "Available balance reduced",
           direction: action.direction === "add" ? "credit" : "debit",
           amount: input.amount,
@@ -252,58 +252,66 @@ export function UserControlCenter() {
       }
       if (action.kind === "investment-status") {
         const investment = action.item;
-        const status = action.status === "active" && investment.type === "flash" ? "flash active" : action.status;
-        const timestamp = Date.now();
-        const changes = { status, statusReason: input.reason, updatedAt: now(), updatedBy: actor.userId };
-        if (status === "frozen" && activeInvestment(investment.status)) {
-          Object.assign(changes, snapshotInvestmentProgress(investment, timestamp), { pausedAt: now(), lastActivatedAt: null });
-        }
-        if (activeInvestment(status) && investment.status === "frozen") {
-          const metrics = calculateLiveLockedBalance(investment, timestamp);
-          const pausedSeconds = Math.max(0, (timestamp - new Date(investment.pausedAt || timestamp).getTime()) / 1000);
-          Object.assign(changes, {
-            activeElapsedSeconds: metrics.activeElapsedSeconds, lockedEarned: metrics.lockedEarned,
-            lastActivatedAt: now(), lastLockedCalculationAt: now(),
-            totalPausedSeconds: Number(investment.totalPausedSeconds || 0) + pausedSeconds,
-            maturityAt: investment.maturityAt ? new Date(new Date(investment.maturityAt).getTime() + pausedSeconds * 1000).toISOString() : null,
-            pausedAt: null,
-          });
-        }
-        if (status === "cancelled") Object.assign(changes, { cancelledAt: now(), archived: true, archivedAt: now(), archivedBy: actor.userId });
+        const changes = {
+          status: action.status || "deleted",
+          lockedEarned: 0,
+          lastActivatedAt: null,
+          nextDueAt: null,
+          updatedAt: now(),
+        };
         await dataService.update("investments", investment.id, changes);
-        await audit(`investment_${status.replace(" ", "_")}`, `${investment.planName || "Investment"} ${status}`, { reason: input.reason, targetId: investment.id });
-        await notify("investment", `Investment ${status}`, input.reason);
+        await audit("investment_deleted", `${investment.planName || "Investment"} deleted/cancelled`, { reason: input.reason, targetId: investment.id });
+      }
+      if (action.kind === "investment-approve") {
+        await approveInvestmentFunding({ investmentId: action.item.id, actor });
+      }
+      if (action.kind === "investment-decline") {
+        await declineInvestmentFunding({ investmentId: action.item.id, reason: input.reason, actor });
       }
       if (action.kind === "investment-return") {
         if (!Number.isFinite(input.amount) || input.amount < 0) throw new Error("Enter a valid projected return.");
+        const previousReturn = Number(action.item.projectedReturn || 0);
         await dataService.update("investments", action.item.id, { projectedReturn: input.amount, updatedAt: now(), updatedBy: actor.userId, statusReason: input.reason });
-        await audit("investment_return_edited", `${action.item.planName} projected return edited`, { amount: input.amount, reason: input.reason, targetId: action.item.id });
-        await notify("investment", "Projected return updated", `${money(input.amount)}. Reason: ${input.reason}`);
+        await audit("investment_return_edited", `${action.item.planName} projected return edited from ${previousReturn} to ${input.amount}`, { amount: input.amount, reason: input.reason, targetId: action.item.id });
       }
       if (action.kind === "investment-extend") {
-        if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error("Enter a valid number of days.");
-        const maturityAt = new Date(new Date(action.item.maturityAt || Date.now()).getTime() + input.amount * 86400000).toISOString();
-        await dataService.update("investments", action.item.id, { maturityAt, pausedDays: Number(action.item.pausedDays || 0) + input.amount, updatedAt: now(), updatedBy: actor.userId, statusReason: input.reason });
-        await audit("investment_extended", `${action.item.planName} extended by ${input.amount} days`, { reason: input.reason, targetId: action.item.id });
-        await notify("investment", "Investment duration extended", `${input.amount} days. Reason: ${input.reason}`);
-      }
-      if (action.kind === "investment-week") {
-        const week = Number(action.item.completedWeeks || 0) + 1;
-        await approveInvestmentDeposit({ id: `manual-${Date.now()}`, investmentId: action.item.id, adminId: action.item.adminId, userId, amount: action.item.weeklyCapital, week, createdAt: now() });
-        await audit("investment_week_paid", `${action.item.planName} week ${week} marked paid`, { amount: action.item.weeklyCapital, reason: input.reason, targetId: action.item.id });
-        await notify("investment", `Investment week ${week} paid`, input.reason);
+        if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error("Enter a valid number of weeks.");
+        const extraWeeks = input.amount;
+        const newTotalWeeks = Number(action.item.totalWeeks || 0) + extraWeeks;
+        const currentMaturity = new Date(action.item.maturityAt || Date.now());
+        const newMaturity = new Date(currentMaturity.getTime() + extraWeeks * 7 * 86400000).toISOString();
+
+        await dataService.update("investments", action.item.id, {
+          totalWeeks: newTotalWeeks,
+          maturityAt: newMaturity,
+          updatedAt: now(),
+          updatedBy: actor.userId,
+          statusReason: input.reason
+        });
+        await audit("investment_extended", `${action.item.planName} extended by ${extraWeeks} weeks`, { reason: input.reason, targetId: action.item.id });
       }
       if (action.kind === "investment-complete") {
-        await dataService.updateUser(userId, { availableBalance: Number(profile.availableBalance || 0) + Number(action.item.projectedReturn || 0) });
+        const returnAmount = Number(action.item.projectedReturn || 0);
+        await dataService.updateUser(userId, { availableBalance: Number(profile.availableBalance || 0) + returnAmount });
         await dataService.update("investments", action.item.id, { status: action.item.type === "flash" ? "flash done" : "completed", completedAt: now(), completedBy: actor.userId, statusReason: input.reason, lockedEarned: 0, lastActivatedAt: null, nextDueAt: null });
-        await audit("investment_matured", `${action.item.planName} force completed`, { amount: action.item.projectedReturn, reason: input.reason, targetId: action.item.id });
-        await notify("investment", "Investment completed", `${money(action.item.projectedReturn)} was credited. Reason: ${input.reason}`);
+        
+        await dataService.log({
+          userId,
+          adminId: profile.adminId,
+          type: "investment_completed",
+          label: "Investment Completed",
+          amount: returnAmount,
+          status: "completed",
+          visibility: "user",
+          createdAt: now(),
+        });
+        await audit("investment_force_completed", `${action.item.planName} force completed`, { amount: returnAmount, reason: input.reason, targetId: action.item.id });
       }
       if (action.kind === "kyc") {
         const storedStatus = action.status === "more-info" ? "rejected" : action.status;
         await reviewKyc({ submissionId: action.item.id, userId, status: storedStatus, rejectionReason: action.status === "rejected" ? input.reason : "", requestDetails: action.status === "more-info" ? input.reason : "" });
         await dataService.update("kycSubmissions", action.item.id, { reviewedBy: actor.userId, reviewedByName: actor.name });
-        await audit(`kyc_${action.status}`, `KYC ${action.status}`, { reason: input.reason, targetId: action.item.id });
+        await audit("kyc_actions", `KYC ${action.status}`, { reason: input.reason, targetId: action.item.id });
         await notify("kyc", action.status === "approved" ? "KYC approved" : action.status === "more-info" ? "More KYC information required" : "KYC rejected", input.reason);
       }
       if (action.kind === "note") {
@@ -342,7 +350,8 @@ export function UserControlCenter() {
     ).length,
     Deposits: records.deposits.filter((item) => item.status === "pending" && isNewForTab("Deposits", item)).length,
     Withdrawals: records.withdrawals.filter((item) => item.status === "pending" && isNewForTab("Withdrawals", item)).length,
-    Transactions: records.transactions.filter((item) => isNewForTab("Transactions", item)).length,
+    Transactions: records.transactions.filter((item) => item.visibility !== "admin_only" && isNewForTab("Transactions", item)).length,
+    "Admin History": records.transactions.filter((item) => (item.visibility === "user" || item.visibility === "admin_only") && isNewForTab("Admin History", item)).length,
     Referrals: records.referrals.filter((item) => isNewForTab("Referrals", item)).length,
     KYC: records.kyc.filter((item) => item.status === "pending" && isNewForTab("KYC", item)).length,
     "Support Tickets": records.tickets.filter((item) => item.adminUnread && isNewForTab("Support Tickets", item)).length,
@@ -410,7 +419,126 @@ export function UserControlCenter() {
             ["Locked balance", money(metrics.lockedEarned)], ["Next deposit due", dateTime(item.nextDueAt)],
             ["Started", dateTime(item.startedAt)], ["Maturity", dateTime(item.maturityAt)],
           ]} />
-          <div className="mt-4 flex flex-wrap gap-2"><button onClick={() => setTimeline(item)} className="btn-secondary bg-white py-2 text-xs text-navy">View timeline</button>{item.status === "frozen" ? <button onClick={() => openAction({ kind: "investment-status", item, status: "active", title: "Unfreeze investment", description: "Resume this investment and preserve its paused duration." })} className="rounded-xl bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-700">Unfreeze</button> : <button onClick={() => openAction({ kind: "investment-status", item, status: "frozen", title: "Freeze investment", description: "Pause this investment and notify the user." })} className="rounded-xl bg-blue-50 px-4 py-2 text-xs font-bold text-blue-700">Freeze</button>}<button onClick={() => openAction({ kind: "investment-status", item, status: "cancelled", title: "Cancel investment", description: "Soft-cancel and archive this investment. No record will be deleted." })} className="rounded-xl bg-red-50 px-4 py-2 text-xs font-bold text-red-700">Cancel</button><button onClick={() => openAction({ kind: "investment-return", item, title: "Edit projected return", description: "Set a new projected return for this investment.", amount: true, defaultAmount: item.projectedReturn })} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold">Edit return</button><button onClick={() => openAction({ kind: "investment-extend", item, title: "Extend duration", description: "Extend the maturity date by a number of days.", amount: true, amountLabel: "Days", defaultAmount: 7 })} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold">Extend</button>{item.type !== "flash" && Number(item.completedWeeks || 0) < Number(item.totalWeeks || 0) && <button onClick={() => openAction({ kind: "investment-week", item, title: "Mark week paid", description: `Mark week ${Number(item.completedWeeks || 0) + 1} as paid.` })} className="rounded-xl bg-gold/15 px-4 py-2 text-xs font-bold text-navy">Mark week paid</button>}{!["completed", "flash done", "cancelled"].includes(item.status) && <button onClick={() => openAction({ kind: "investment-complete", item, title: "Force complete investment", description: "Complete this investment and credit its projected return to available balance." })} className="btn-primary py-2 text-xs">Force complete</button>}</div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {["active", "flash active", "completed", "flash done", "deleted", "cancelled", "frozen", "paused"].includes(item.status) && (
+              <button onClick={() => setTimeline(item)} className="btn-secondary bg-white py-2 text-xs text-navy">View timeline</button>
+            )}
+
+            {item.status === "awaiting_funding" && (
+              <button
+                onClick={() =>
+                  openAction({
+                    kind: "investment-status",
+                    item,
+                    status: "deleted",
+                    title: "Delete Investment",
+                    description: "Are you sure you want to delete/cancel this investment? This action cannot be undone. Enter deletion reason:"
+                  })
+                }
+                className="rounded-xl bg-red-50 px-4 py-2 text-xs font-bold text-red-700 hover:bg-red-100"
+              >
+                Delete / Cancel
+              </button>
+            )}
+
+            {item.status === "pending" && (
+              <>
+                <button
+                  onClick={async () => {
+                    if (window.confirm(`Approve funding for ${item.planName}?`)) {
+                      try {
+                        await approveInvestmentFunding({ investmentId: item.id, actor });
+                        await load();
+                      } catch (err) {
+                        window.alert(err.message);
+                      }
+                    }
+                  }}
+                  className="rounded-xl bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
+                >
+                  Approve
+                </button>
+                <button
+                  onClick={() =>
+                    openAction({
+                      kind: "investment-decline",
+                      item,
+                      title: "Decline Funding Request",
+                      description: "Enter reason to decline this investment funding request:"
+                    })
+                  }
+                  className="rounded-xl bg-red-50 px-4 py-2 text-xs font-bold text-red-700 hover:bg-red-100"
+                >
+                  Decline
+                </button>
+              </>
+            )}
+
+            {["active", "flash active", "frozen", "paused"].includes(item.status) && (
+              <>
+                <button
+                  onClick={() =>
+                    openAction({
+                      kind: "investment-return",
+                      item,
+                      title: "Edit Projected Return",
+                      description: "Set a new projected return for this investment:",
+                      amount: true,
+                      defaultAmount: item.projectedReturn
+                    })
+                  }
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold hover:bg-slate-50"
+                >
+                  Edit return
+                </button>
+                <button
+                  onClick={() =>
+                    openAction({
+                      kind: "investment-extend",
+                      item,
+                      title: "Extend Investment",
+                      description: "Extend the maturity date by adding extra weeks:",
+                      amount: true,
+                      amountLabel: "Extra Weeks",
+                      min: 1,
+                      step: 1,
+                      defaultAmount: 2
+                    })
+                  }
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold hover:bg-slate-50"
+                >
+                  Extend
+                </button>
+                <button
+                  onClick={() =>
+                    openAction({
+                      kind: "investment-complete",
+                      item,
+                      title: "Force Complete Investment",
+                      description: "Immediately complete this investment and credit its projected return to available balance:"
+                    })
+                  }
+                  className="btn-primary py-2 text-xs"
+                >
+                  Force complete
+                </button>
+                <button
+                  onClick={() =>
+                    openAction({
+                      kind: "investment-status",
+                      item,
+                      status: "deleted",
+                      title: "Cancel/Delete Active Investment",
+                      description: "Are you sure you want to delete/cancel this active investment? Accumulated locked earnings will disappear and no payout will occur. Enter reason:"
+                    })
+                  }
+                  className="rounded-xl bg-red-50 px-4 py-2 text-xs font-bold text-red-700 hover:bg-red-100"
+                >
+                  Cancel/Delete
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </details>
     </div>;
@@ -420,7 +548,9 @@ export function UserControlCenter() {
 
   const withdrawals = <RecordsList items={sorted(records.withdrawals)} emptyTitle="No withdrawals" render={(item) => <div key={item.id} className="glass-card p-5"><div className="flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><div className="flex items-center gap-2"><StatusBadge status={item.status} /><span className="rounded-full bg-stone px-2 py-1 text-[10px] font-bold uppercase text-slate-500">{item.type === "referral" ? "Referral Balance Withdrawal" : "Available Balance Withdrawal"}</span></div><h3 className="mt-3 font-bold text-navy">{money(item.amount)} · {item.method}</h3><p className="mt-1 text-xs text-slate-500">{item.accountDetails}</p><p className="mt-1 text-xs text-slate-400">{dateTime(item.createdAt)}</p>{item.declineReason && <p className="mt-2 text-xs text-red-600">Reason: {item.declineReason}</p>}</div>{item.status === "pending" && <div className="flex gap-2"><button onClick={() => openAction({ kind: "withdrawal", item, status: "approved", title: "Approve withdrawal", description: `Approve and deduct from ${item.type === "referral" ? "referral balance only" : "available balance only"}.` })} className="rounded-xl bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-700">Approve</button><button onClick={() => openAction({ kind: "withdrawal", item, status: "declined", title: "Decline Withdrawal", description: "Decline this withdrawal and send the reason to the user." })} className="rounded-xl bg-red-50 px-4 py-2 text-xs font-bold text-red-700">Decline</button></div>}</div></div>} />;
 
-  const transactions = <RecordsList items={sorted(records.transactions)} emptyTitle="No transactions" render={(item) => <div key={item.id} className="glass-card flex flex-col justify-between gap-4 p-5 sm:flex-row sm:items-center"><div><div className="flex flex-wrap items-center gap-2"><p className="font-bold text-navy">{item.label}</p>{item.visibility === "admin_only" && <span className="rounded-full bg-amber-50 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-amber-700">Internal</span>}</div><p className="mt-1 text-[10px] uppercase tracking-widest text-slate-400">{String(item.type || "").replaceAll("_", " ")} · {dateTime(item.createdAt)}</p>{item.reason && <p className="mt-2 text-xs text-slate-600">Reason: {item.reason}</p>}{item.adminActorName && <p className="mt-1 text-xs text-slate-400">Admin: {item.adminActorName}</p>}{item.visibility === "admin_only" && <p className="mt-1 text-xs text-slate-400">Available balance: {money(item.beforeBalance)} to {money(item.afterBalance)}</p>}</div><div className="text-left sm:text-right">{Number(item.amount || 0) !== 0 && <p className="font-bold text-navy">{item.direction === "debit" ? "-" : item.direction === "credit" ? "+" : ""}{money(item.amount)}</p>}<StatusBadge status={item.status} /></div></div>} />;
+  const transactions = <RecordsList items={sorted(records.transactions.filter((item) => item.visibility !== "admin_only"))} emptyTitle="No transactions" render={(item) => <div key={item.id} className="glass-card flex flex-col justify-between gap-4 p-5 sm:flex-row sm:items-center"><div><div className="flex flex-wrap items-center gap-2"><p className="font-bold text-navy">{item.label}</p></div><p className="mt-1 text-[10px] uppercase tracking-widest text-slate-400">{String(item.type || "").replaceAll("_", " ")} · {dateTime(item.createdAt)}</p>{item.reason && <p className="mt-2 text-xs text-slate-600">Reason: {item.reason}</p>}</div><div className="text-left sm:text-right">{Number(item.amount || 0) !== 0 && <p className="font-bold text-navy">{item.direction === "debit" ? "-" : item.direction === "credit" ? "+" : ""}{money(item.amount)}</p>}<StatusBadge status={item.status} /></div></div>} />;
+
+  const adminHistory = <RecordsList items={sorted(records.transactions)} emptyTitle="No admin history" render={(item) => <div key={item.id} className="glass-card flex flex-col justify-between gap-4 p-5 sm:flex-row sm:items-center"><div><div className="flex flex-wrap items-center gap-2"><p className="font-bold text-navy">{item.label}</p>{item.visibility === "admin_only" && <span className="rounded-full bg-amber-50 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-amber-700">Internal</span>}</div><p className="mt-1 text-[10px] uppercase tracking-widest text-slate-400">{String(item.type || "").replaceAll("_", " ")} · {dateTime(item.createdAt)}</p>{item.reason && <p className="mt-2 text-xs text-slate-600">Reason: {item.reason}</p>}{item.adminActorName && <p className="mt-1 text-xs text-slate-400">Admin: {item.adminActorName}</p>}{item.visibility === "admin_only" && <p className="mt-1 text-xs text-slate-400">Available balance: {money(item.beforeBalance)} to {money(item.afterBalance)}</p>}</div><div className="text-left sm:text-right">{Number(item.amount || 0) !== 0 && <p className="font-bold text-navy">{item.direction === "debit" ? "-" : item.direction === "credit" ? "+" : ""}{money(item.amount)}</p>}<StatusBadge status={item.status} /></div></div>} />;
 
   const referrals = <div className="space-y-6"><div className="glass-card p-6"><DetailGrid items={[
     ["Referral code", profile.referralCode || "Not assigned"],
@@ -446,7 +576,7 @@ export function UserControlCenter() {
 
   const content = {
     Overview: overview, Balances: balances, Investments: investments, Deposits: deposits,
-    Withdrawals: withdrawals, Transactions: transactions, Referrals: referrals, KYC: kyc,
+    Withdrawals: withdrawals, Transactions: transactions, "Admin History": adminHistory, Referrals: referrals, KYC: kyc,
     "Support Tickets": tickets, "Admin Notes": notes,
   }[tab];
 

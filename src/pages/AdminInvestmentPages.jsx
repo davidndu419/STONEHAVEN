@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { Edit3, Plus, RefreshCw, Snowflake, Trash2, TrendingUp, Upload } from "lucide-react";
+import { Edit3, Plus, RefreshCw, Trash2, TrendingUp, Upload } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { dataService } from "../lib/dataService";
 import { uploadToCloudinary } from "../lib/cloudinary";
 import { EmptyState, Modal, PageHeader, StatusBadge } from "../components/UI";
 import { money, Timeline } from "../components/InvestmentUI";
-import { approveInvestmentDeposit, reconcileInvestmentTimers } from "../lib/investmentEngine";
-import { calculateLiveLockedBalance, snapshotInvestmentProgress } from "../lib/lockedBalance";
-import { createNotification } from "../lib/enterprise";
+import { reconcileInvestmentTimers } from "../lib/investmentEngine";
 import { DepositMethodsPage } from "./AdminPages";
 
 const defaultTiers = [
@@ -74,39 +72,436 @@ export function InvestmentLibraryPage() {
   </div>;
 }
 
-export function AdminInvestmentsPage() {
-  const { items, load } = useScoped("investments"); const [detail, setDetail] = useState(null);
-  async function updateStatus(investment, status, reason = "") {
-    if (status === "active" && investment.type === "flash") status = "flash active";
-    const now = Date.now();
-    const changes = { status, statusReason: reason, updatedAt: new Date(now).toISOString() };
-    if (status === "frozen" && ["active", "flash active"].includes(investment.status)) {
-      Object.assign(changes, snapshotInvestmentProgress(investment, now), {
-        pausedAt: new Date(now).toISOString(),
-        lastActivatedAt: null,
+import { approveInvestmentFunding, declineInvestmentFunding } from "../lib/approvalWorkflow";
+
+function ActionModal({ action, onClose, onSubmit }) {
+  const [reason, setReason] = useState("");
+  const [amount, setAmount] = useState(action?.defaultAmount ?? "");
+  const [extraWeeks, setExtraWeeks] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  if (!action) return null;
+
+  async function submit(event) {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      await onSubmit({
+        reason: reason.trim(),
+        amount: Number(amount),
+        extraWeeks: Number(extraWeeks),
       });
+      onClose();
+    } catch (err) {
+      window.alert(err.message);
+    } finally {
+      setBusy(false);
     }
-    if (["active", "flash active"].includes(status) && investment.status === "frozen") {
-      const metrics = calculateLiveLockedBalance(investment, now);
-      const pausedSeconds = Math.max(0, (now - new Date(investment.pausedAt || now).getTime()) / 1000);
-      Object.assign(changes, {
-        activeElapsedSeconds: metrics.activeElapsedSeconds,
-        lockedEarned: metrics.lockedEarned,
-        lastActivatedAt: new Date(now).toISOString(),
-        lastLockedCalculationAt: new Date(now).toISOString(),
-        totalPausedSeconds: Number(investment.totalPausedSeconds || 0) + pausedSeconds,
-        maturityAt: investment.maturityAt
-          ? new Date(new Date(investment.maturityAt).getTime() + pausedSeconds * 1000).toISOString()
-          : null,
-        pausedAt: null,
-      });
-    }
-    await dataService.update("investments", investment.id, changes);
-    await dataService.log({ userId: investment.userId, adminId: investment.adminId, type: `investment_${status.replace(" ", "_")}`, label: `${investment.planName} ${status}`, amount: 0, status });
-    await createNotification({ userId: investment.userId, adminId: investment.adminId, type: "investment", title: `Investment ${status}`, message: reason || `${investment.planName} is now ${status}.` });
-    load();
   }
-  async function forceComplete(investment) { const user = await dataService.getUser(investment.userId); await dataService.updateUser(user.userId, { availableBalance: Number(user.availableBalance || 0) + Number(investment.projectedReturn) }); await dataService.update("investments", investment.id, { status: investment.type === "flash" ? "flash done" : "completed", completedAt: new Date().toISOString(), lockedEarned: 0, lastActivatedAt: null, nextDueAt: null }); await dataService.log({ userId: investment.userId, adminId: investment.adminId, type: "investment_matured", label: `${investment.planName} force completed`, amount: investment.projectedReturn, status: "completed" }); load(); }
-  async function markWeek(investment) { const week = investment.completedWeeks + 1; if (week > investment.totalWeeks) return; await approveInvestmentDeposit({ id: `manual-${Date.now()}`, investmentId: investment.id, adminId: investment.adminId, userId: investment.userId, amount: investment.weeklyCapital, week, createdAt: new Date().toISOString() }); load(); }
-  return <div><PageHeader eyebrow="Plan operations" title="Investment controls" description="Manage plans within your admin scope. Super-admin views automatically span every scope." action={<button onClick={load} className="btn-secondary bg-white text-navy"><RefreshCw size={15} /> Refresh</button>} />{items.length ? <div className="space-y-4">{items.map((item) => <div key={item.id} className="glass-card p-6"><div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-center"><div><div className="flex items-center gap-3"><StatusBadge status={item.status} /><span className="text-[10px] uppercase tracking-widest text-slate-400">{item.type}</span></div><h2 className="display-title mt-3 text-2xl text-navy">{item.planName}</h2><p className="mt-1 text-xs text-slate-400">{item.userName} · {item.ticker} · {item.completedWeeks || 0}/{item.totalWeeks} weeks · {money(item.projectedReturn)}</p></div><div className="flex flex-wrap gap-2"><button onClick={() => setDetail(item)} className="btn-secondary bg-white text-navy">Timeline</button>{item.status === "frozen" ? <button onClick={() => updateStatus(item, "active")} className="rounded-xl bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-700">Unfreeze</button> : <button onClick={() => updateStatus(item, "frozen")} className="rounded-xl bg-blue-50 px-4 py-2 text-xs font-bold text-blue-700"><Snowflake className="mr-1 inline" size={14} /> Freeze</button>}<button onClick={() => { const reason = window.prompt("Deletion reason"); if (reason) updateStatus(item, "deleted", reason); }} className="rounded-xl bg-red-50 px-4 py-2 text-xs font-bold text-red-700">Delete</button><button onClick={() => { const value = window.prompt("New projected return", item.projectedReturn); if (value) { dataService.update("investments", item.id, { projectedReturn: Number(value) }).then(load); } }} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold">Edit return</button><button onClick={() => { const days = Number(window.prompt("Extend by days", "7")); if (days) { const maturity = new Date(new Date(item.maturityAt || Date.now()).getTime() + days * 86400000).toISOString(); dataService.update("investments", item.id, { maturityAt: maturity, pausedDays: Number(item.pausedDays || 0) + days }).then(load); } }} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold">Extend</button>{item.type !== "flash" && item.completedWeeks < item.totalWeeks && <button onClick={() => markWeek(item)} className="rounded-xl bg-gold/15 px-4 py-2 text-xs font-bold text-navy">Mark week paid</button>}{!["completed", "flash done"].includes(item.status) && <button onClick={() => forceComplete(item)} className="btn-primary">Force complete</button>}</div></div></div>)}</div> : <EmptyState icon={TrendingUp} title="No investment plans" text="New client plans will appear here after they select an investment tier." />}<Modal open={Boolean(detail)} onClose={() => setDetail(null)} title={detail?.planName || "Timeline"}>{detail && <Timeline investment={detail} />}</Modal></div>;
+
+  return (
+    <Modal open title={action.title} onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <p className="text-sm leading-6 text-slate-500">{action.description}</p>
+        
+        {action.showAmount && (
+          <div>
+            <label className="label">{action.amountLabel || "Amount"}</label>
+            <input
+              className="field"
+              type="number"
+              step="0.01"
+              required
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+          </div>
+        )}
+
+        {action.showExtraWeeks && (
+          <div>
+            <label className="label">Extra Weeks</label>
+            <input
+              className="field"
+              type="number"
+              min="1"
+              step="1"
+              required
+              value={extraWeeks}
+              onChange={(e) => setExtraWeeks(e.target.value)}
+              placeholder="e.g. 2"
+            />
+          </div>
+        )}
+
+        <div>
+          <label className="label">
+            Reason <span className="text-red-500">*</span>
+          </label>
+          <textarea
+            className="field min-h-28"
+            required
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Record the operational reason for this action."
+          />
+        </div>
+
+        <button
+          disabled={busy || !reason.trim()}
+          className="btn-primary w-full"
+        >
+          {busy ? "Saving..." : action.confirmLabel || "Confirm"}
+        </button>
+      </form>
+    </Modal>
+  );
+}
+
+export function AdminInvestmentsPage() {
+  const { items, load, user: actor } = useScoped("investments");
+  const [detail, setDetail] = useState(null);
+  const [actionModal, setActionModal] = useState(null);
+
+  const openActionModal = (config) => setActionModal(config);
+
+  const getStatusOrder = (status) => {
+    if (status === "pending") return 1;
+    if (status === "awaiting_funding") return 2;
+    if (["active", "flash active", "paused", "frozen"].includes(status)) return 3;
+    if (["completed", "flash done"].includes(status)) return 4;
+    if (["deleted", "cancelled"].includes(status)) return 5;
+    return 6;
+  };
+
+  const sortedItems = [...items].sort((a, b) => {
+    const orderA = getStatusOrder(a.status);
+    const orderB = getStatusOrder(b.status);
+    if (orderA !== orderB) return orderA - orderB;
+    return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+  });
+
+  async function handleApprove(item) {
+    if (!window.confirm(`Approve funding for ${item.planName}?`)) return;
+    try {
+      await approveInvestmentFunding({ investmentId: item.id, actor });
+      load();
+    } catch (err) {
+      window.alert(err.message);
+    }
+  }
+
+  async function handleActionSubmit({ reason, amount, extraWeeks }) {
+    const { kind, item } = actionModal;
+    const nowStr = new Date().toISOString();
+
+    try {
+      if (kind === "delete" || kind === "delete-active") {
+        await dataService.update("investments", item.id, {
+          status: "deleted",
+          lockedEarned: 0,
+          lastActivatedAt: null,
+          nextDueAt: null,
+          updatedAt: nowStr,
+        });
+
+        await dataService.log({
+          userId: item.userId,
+          adminId: item.adminId,
+          type: "investment_deleted",
+          label: `${item.planName} deleted/cancelled`,
+          amount: 0,
+          status: "deleted",
+          reason: reason,
+          adminActorId: actor.userId,
+          adminActorName: actor.name,
+          targetId: item.id,
+          visibility: "admin_only",
+        });
+      }
+
+      if (kind === "decline") {
+        await declineInvestmentFunding({ investmentId: item.id, reason, actor });
+      }
+
+      if (kind === "edit-return") {
+        const previousReturn = Number(item.projectedReturn || 0);
+        await dataService.update("investments", item.id, {
+          projectedReturn: amount,
+          previousProjectedReturn: previousReturn,
+          updatedAt: nowStr,
+        });
+
+        await dataService.log({
+          userId: item.userId,
+          adminId: item.adminId,
+          type: "investment_return_edited",
+          label: `${item.planName} projected return edited from ${previousReturn} to ${amount}`,
+          amount: amount,
+          status: "completed",
+          reason: reason,
+          adminActorId: actor.userId,
+          adminActorName: actor.name,
+          targetId: item.id,
+          visibility: "admin_only",
+        });
+      }
+
+      if (kind === "extend") {
+        const newTotalWeeks = Number(item.totalWeeks || 0) + extraWeeks;
+        const currentMaturity = new Date(item.maturityAt || Date.now());
+        const newMaturity = new Date(currentMaturity.getTime() + extraWeeks * 7 * 86400000).toISOString();
+
+        await dataService.update("investments", item.id, {
+          totalWeeks: newTotalWeeks,
+          maturityAt: newMaturity,
+          updatedAt: nowStr,
+        });
+
+        await dataService.log({
+          userId: item.userId,
+          adminId: item.adminId,
+          type: "investment_extended",
+          label: `${item.planName} extended by ${extraWeeks} weeks`,
+          amount: 0,
+          status: "completed",
+          reason: reason,
+          adminActorId: actor.userId,
+          adminActorName: actor.name,
+          targetId: item.id,
+          visibility: "admin_only",
+        });
+      }
+
+      if (kind === "force-complete") {
+        const user = await dataService.getUser(item.userId);
+        const returnAmount = Number(item.projectedReturn || 0);
+
+        await dataService.updateUser(user.userId, {
+          availableBalance: Number(user.availableBalance || 0) + returnAmount,
+        });
+
+        await dataService.update("investments", item.id, {
+          status: item.type === "flash" ? "flash done" : "completed",
+          completedAt: nowStr,
+          completedBy: actor.userId,
+          lockedEarned: 0,
+          lastActivatedAt: null,
+          nextDueAt: null,
+          updatedAt: nowStr,
+        });
+
+        await dataService.log({
+          userId: item.userId,
+          adminId: item.adminId,
+          type: "investment_completed",
+          label: "Investment Completed",
+          amount: returnAmount,
+          status: "completed",
+          visibility: "user",
+          createdAt: nowStr,
+        });
+
+        await dataService.log({
+          userId: item.userId,
+          adminId: item.adminId,
+          type: "investment_force_completed",
+          label: `${item.planName} force completed`,
+          amount: returnAmount,
+          status: "completed",
+          reason: reason,
+          adminActorId: actor.userId,
+          adminActorName: actor.name,
+          targetId: item.id,
+          visibility: "admin_only",
+          createdAt: nowStr,
+        });
+      }
+
+      load();
+    } catch (err) {
+      window.alert(err.message);
+    }
+  }
+
+  return (
+    <div>
+      <PageHeader
+        eyebrow="Plan operations"
+        title="Investment controls"
+        description="Manage plans within your admin scope. Super-admin views automatically span every scope."
+        action={
+          <button onClick={load} className="btn-secondary bg-white text-navy">
+            <RefreshCw size={15} /> Refresh
+          </button>
+        }
+      />
+      {sortedItems.length ? (
+        <div className="space-y-4">
+          {sortedItems.map((item) => {
+            const isPending = item.status === "pending";
+            return (
+              <div
+                key={item.id}
+                className={`glass-card p-6 transition-all duration-300 ${
+                  isPending
+                    ? "border-2 border-gold bg-gold/[.03] shadow-md ring-2 ring-gold/10"
+                    : ""
+                }`}
+              >
+                <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
+                  <div>
+                    <div className="flex items-center gap-3">
+                      {isPending ? (
+                        <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-amber-800">
+                          Pending Approval
+                        </span>
+                      ) : (
+                        <StatusBadge status={item.status} />
+                      )}
+                      <span className="text-[10px] uppercase tracking-widest text-slate-400">
+                        {item.type}
+                      </span>
+                    </div>
+                    <h2 className="display-title mt-3 text-2xl text-navy">
+                      {item.planName}
+                    </h2>
+                    <p className="mt-1 text-xs text-slate-400">
+                      {item.userName} · {item.ticker} · {item.completedWeeks || 0}/{item.totalWeeks} weeks · {money(item.projectedReturn)}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {["active", "flash active", "completed", "flash done", "deleted", "cancelled", "frozen", "paused"].includes(item.status) && (
+                      <button
+                        onClick={() => setDetail(item)}
+                        className="btn-secondary bg-white text-navy"
+                      >
+                        Timeline
+                      </button>
+                    )}
+
+                    {item.status === "awaiting_funding" && (
+                      <button
+                        onClick={() =>
+                          openActionModal({
+                            kind: "delete",
+                            item,
+                            title: "Delete Investment",
+                            description: "Are you sure you want to delete/cancel this investment? This action cannot be undone. Enter deletion reason:",
+                            confirmLabel: "Delete/Cancel Investment",
+                          })
+                        }
+                        className="rounded-xl bg-red-50 px-4 py-2 text-xs font-bold text-red-700 hover:bg-red-100"
+                      >
+                        Delete / Cancel
+                      </button>
+                    )}
+
+                    {item.status === "pending" && (
+                      <>
+                        <button
+                          onClick={() => handleApprove(item)}
+                          className="rounded-xl bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() =>
+                            openActionModal({
+                              kind: "decline",
+                              item,
+                              title: "Decline Funding Request",
+                              description: "Enter reason to decline this investment funding request:",
+                              confirmLabel: "Decline Funding",
+                            })
+                          }
+                          className="rounded-xl bg-red-50 px-4 py-2 text-xs font-bold text-red-700 hover:bg-red-100"
+                        >
+                          Decline
+                        </button>
+                      </>
+                    )}
+
+                    {["active", "flash active", "frozen", "paused"].includes(item.status) && (
+                      <>
+                        <button
+                          onClick={() =>
+                            openActionModal({
+                              kind: "edit-return",
+                              item,
+                              title: "Edit Projected Return",
+                              description: "Set a new projected return for this investment:",
+                              showAmount: true,
+                              defaultAmount: item.projectedReturn,
+                              confirmLabel: "Save Return",
+                            })
+                          }
+                          className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold hover:bg-slate-50"
+                        >
+                          Edit return
+                        </button>
+                        <button
+                          onClick={() =>
+                            openActionModal({
+                              kind: "extend",
+                              item,
+                              title: "Extend Investment",
+                              description: "Extend the maturity date by adding extra weeks:",
+                              showExtraWeeks: true,
+                              confirmLabel: "Extend Investment",
+                            })
+                          }
+                          className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold hover:bg-slate-50"
+                        >
+                          Extend
+                        </button>
+                        <button
+                          onClick={() =>
+                            openActionModal({
+                              kind: "force-complete",
+                              item,
+                              title: "Force Complete Investment",
+                              description: "Immediately complete this investment and credit its projected return to available balance:",
+                              confirmLabel: "Force complete",
+                            })
+                          }
+                          className="btn-primary py-2 text-xs"
+                        >
+                          Force complete
+                        </button>
+                        <button
+                          onClick={() =>
+                            openActionModal({
+                              kind: "delete-active",
+                              item,
+                              title: "Cancel/Delete Active Investment",
+                              description: "Are you sure you want to delete/cancel this active investment? Accumulated locked earnings will disappear and no payout will occur.",
+                              confirmLabel: "Cancel/Delete",
+                            })
+                          }
+                          className="rounded-xl bg-red-50 px-4 py-2 text-xs font-bold text-red-700 hover:bg-red-100"
+                        >
+                          Cancel/Delete
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <EmptyState
+          icon={TrendingUp}
+          title="No investment plans"
+          text="New client plans will appear here after they select an investment tier."
+        />
+      )}
+      <Modal open={Boolean(detail)} onClose={() => setDetail(null)} title={detail?.planName || "Timeline"}>
+        {detail && <Timeline investment={detail} />}
+      </Modal>
+      <ActionModal action={actionModal} onClose={() => setActionModal(null)} onSubmit={handleActionSubmit} />
+    </div>
+  );
 }

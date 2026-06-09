@@ -77,7 +77,7 @@ export async function submitDepositIntent(payload) {
   if (payload.investmentId) {
     await dataService.update("investments", payload.investmentId, {
       fundingSource: "new_deposit",
-      status: "pending_approval",
+      status: "pending",
     });
   }
   return deposit;
@@ -134,7 +134,7 @@ export async function activateInvestmentFromBalance(payload) {
     }).catch(() => {});
     await dataService.update("investments", investment.id, {
       fundingSource: "available_balance",
-      status: "pending_approval",
+      status: "pending",
     });
     return { depositId: deposit.id, investmentId: investment.id, status: "pending" };
   }

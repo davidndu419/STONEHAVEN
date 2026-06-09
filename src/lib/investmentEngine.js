@@ -126,7 +126,7 @@ export async function approveInvestmentDeposit(deposit) {
       totalPausedSeconds: 0, lastLockedCalculationAt: approvedAt, currentWeek: 1,
       timeline: [{ week: 1, status: "approved", amount: fundedAmount, depositId: deposit.id, submittedAt: deposit.createdAt, approvedAt }],
     });
-    await dataService.log({ userId: investment.userId, adminId: investment.adminId, type: "flash_activated", label: `${investment.planName} activated`, amount: fundedAmount, status: "active" });
+    await dataService.log({ userId: investment.userId, adminId: investment.adminId, type: "investment_approved", label: "Investment Approved", amount: fundedAmount, status: "approved", visibility: "user" });
     await notify(investment, "investment", "Flash investment activated", `Your ${investment.planName} countdown has started.`);
     return;
   }
@@ -184,7 +184,7 @@ export async function approveInvestmentDeposit(deposit) {
   }
   updates.nextDueAt = addDays(approvedAt, 7);
 
-  await dataService.log({ userId: investment.userId, adminId: investment.adminId, type: firstApproval ? "investment_activated" : resumed ? "investment_resumed" : "weekly_deposit_approved", label: firstApproval ? `${investment.planName} activated` : `Week ${week} approved`, amount: fundedAmount, status: "approved" });
+  await dataService.log({ userId: investment.userId, adminId: investment.adminId, type: firstApproval ? "investment_approved" : resumed ? "investment_resumed" : "weekly_deposit_approved", label: firstApproval ? "Investment Approved" : resumed ? `${investment.planName} resumed` : `Week ${week} approved`, amount: fundedAmount, status: "approved", visibility: "user" });
   if (firstApproval) await notify(investment, "investment", investment.type === "stock" ? "Shares purchased successfully" : "Investment activated", `${investment.planName} is now active.`);
   await dataService.update("investments", investment.id, updates);
 }

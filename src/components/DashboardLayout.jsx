@@ -132,7 +132,7 @@ export default function DashboardLayout({ admin = false, superAdmin = false }) {
       setAdminBadgeCounts({
         users: users.filter((item) => item.role === "user" && changedAfter(item, "users")).length,
         investments: investments.filter((item) =>
-          ["pending", "pending_approval", "awaiting_funding", "frozen"].includes(item.status)
+          ["pending", "awaiting_funding", "frozen"].includes(item.status)
           && changedAfter(item, "investments")
         ).length,
         approvals:

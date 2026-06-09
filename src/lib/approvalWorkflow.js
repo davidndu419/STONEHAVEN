@@ -75,7 +75,7 @@ export async function reviewFinancialRequest({ collection, item, status, reason 
     await approveInvestmentDeposit(item);
   }
   if (collection === "deposits" && status === "declined" && item.investmentId) {
-    await rejectInvestmentDeposit(item);
+    await declineInvestmentFunding({ investmentId: item.investmentId, reason: reason.trim(), actor });
   }
 
   const reviewedAt = now();
@@ -114,4 +114,83 @@ export async function reviewFinancialRequest({ collection, item, status, reason 
       targetId: item.id,
     }),
   ]);
+}
+
+export async function declineInvestmentFunding({ investmentId, reason, actor }) {
+  const investments = await dataService.list("investments", actor.adminId, true);
+  const investment = investments.find((item) => item.id === investmentId);
+  if (!investment) return;
+
+  const declinedAt = now();
+
+  // 1. Update status back to awaiting_funding and record decline details
+  await dataService.update("investments", investment.id, {
+    status: "awaiting_funding",
+    declinedAt,
+    declinedBy: actor.userId,
+    declineReason: reason,
+  });
+
+  // 2. Find any pending deposits for this investment and update them
+  const deposits = await dataService.list("deposits", investment.adminId, true);
+  const pendingDeposit = deposits.find((d) => d.investmentId === investment.id && d.status === "pending");
+  if (pendingDeposit) {
+    await rejectInvestmentDeposit(pendingDeposit);
+    await dataService.update("deposits", pendingDeposit.id, {
+      status: "declined",
+      reviewedAt: declinedAt,
+      declineReason: reason,
+      declinedAt,
+      declinedBy: actor.userId,
+    });
+  }
+
+  // 3. Create user-visible transaction: Investment Funding Declined
+  await dataService.log({
+    userId: investment.userId,
+    adminId: investment.adminId,
+    type: "investment_funding_declined",
+    label: "Investment Funding Declined",
+    amount: Number(pendingDeposit?.amount || 0),
+    status: "declined",
+    reason: reason,
+    visibility: "user",
+    createdAt: declinedAt,
+  });
+
+  // 4. Send notification with reason
+  await createNotification({
+    userId: investment.userId,
+    adminId: investment.adminId,
+    type: "investment",
+    title: "Investment Funding Declined",
+    message: `Your funding request for ${investment.planName} was declined. Reason: ${reason}`,
+  });
+}
+
+export async function approveInvestmentFunding({ investmentId, actor }) {
+  const deposits = await dataService.list("deposits", actor.adminId, true);
+  const pendingDeposit = deposits.find((d) => d.investmentId === investmentId && d.status === "pending");
+  if (pendingDeposit) {
+    await reviewFinancialRequest({
+      collection: "deposits",
+      item: pendingDeposit,
+      status: "approved",
+      actor
+    });
+  } else {
+    // fallback if no pending deposit
+    const investments = await dataService.list("investments", actor.adminId, true);
+    const investment = investments.find((item) => item.id === investmentId);
+    if (investment) {
+      await approveInvestmentDeposit({
+        id: `manual-approve-${Date.now()}`,
+        investmentId: investment.id,
+        adminId: investment.adminId,
+        userId: investment.userId,
+        amount: investment.type === "flash" ? investment.capital : investment.weeklyCapital,
+        createdAt: now(),
+      });
+    }
+  }
 }
