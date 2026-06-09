@@ -98,8 +98,8 @@ export default function LandingPage() {
             <div className="absolute -inset-10 rounded-full bg-gold/10 blur-3xl" />
             <div className="dark-glass relative overflow-hidden p-7">
               <div className="flex items-start justify-between border-b border-white/10 pb-6">
-                <div><p className="text-xs uppercase tracking-[.2em] text-white/35">Global portfolio index</p><p className="mt-2 font-display text-4xl font-bold">$636,640</p></div>
-                <span className="rounded-full bg-forest/30 px-3 py-1.5 text-xs text-emerald-300">+18.4%</span>
+                <div><p className="text-xs uppercase tracking-[.2em] text-white/35">Global portfolio index</p><p className="mt-2 font-display text-4xl font-bold">$1,636,640,000</p></div>
+                <span className="rounded-full bg-forest/30 px-3 py-1.5 text-xs text-emerald-300">+75.4%</span>
               </div>
               <div className="relative mt-8 h-52">
                 <svg viewBox="0 0 500 200" className="h-full w-full overflow-visible">
@@ -118,7 +118,7 @@ export default function LandingPage() {
 
       <section className="relative z-10 mx-auto -mt-12 max-w-7xl px-5">
         <div className="glass-card grid divide-y divide-slate-200 p-3 md:grid-cols-4 md:divide-x md:divide-y-0">
-          {[["$2.4B+", "Capital returned"], ["48,000+", "Global investors"], ["120+", "Countries served"], ["98.7%", "Client satisfaction"]].map(([value, label]) => <div key={label} className="px-6 py-7 text-center"><p className="display-title text-3xl text-navy">{value}</p><p className="mt-1 text-xs uppercase tracking-[.14em] text-slate-400">{label}</p></div>)}
+          {[["$2.4B+", "Capital returned"], ["48,000+", "Global investors"], ["120+", "Countries served"], ["99.7%", "Client satisfaction"]].map(([value, label]) => <div key={label} className="px-6 py-7 text-center"><p className="display-title text-3xl text-navy">{value}</p><p className="mt-1 text-xs uppercase tracking-[.14em] text-slate-400">{label}</p></div>)}
         </div>
       </section>
 
