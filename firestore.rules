@@ -425,9 +425,8 @@ service cloud.firestore {
     }
 
     match /coins/{documentId} {
-      allow read: if isActive()
-        && (ownsAdminScope(resource.data.adminId)
-          || (resource.data.adminId == profile().adminId && resource.data.active == true));
+      allow read: if resource.data.active == true
+        || (isActive() && ownsAdminScope(resource.data.adminId));
       allow create: if isAdmin()
         && ownsAdminScope(request.resource.data.adminId)
         && request.resource.data.keys().hasOnly([
@@ -448,9 +447,8 @@ service cloud.firestore {
     }
 
     match /stocks/{documentId} {
-      allow read: if isActive()
-        && (ownsAdminScope(resource.data.adminId)
-          || (resource.data.adminId == profile().adminId && resource.data.active == true));
+      allow read: if resource.data.active == true
+        || (isActive() && ownsAdminScope(resource.data.adminId));
       allow create: if isAdmin()
         && ownsAdminScope(request.resource.data.adminId)
         && request.resource.data.keys().hasOnly([
@@ -473,9 +471,8 @@ service cloud.firestore {
     }
 
     match /flashSettings/{documentId} {
-      allow read: if isActive()
-        && (ownsAdminScope(resource.data.adminId)
-          || (resource.data.adminId == profile().adminId && resource.data.active == true));
+      allow read: if resource.data.active == true
+        || (isActive() && ownsAdminScope(resource.data.adminId));
       allow create: if isAdmin()
         && ownsAdminScope(request.resource.data.adminId)
         && request.resource.data.keys().hasOnly([
@@ -494,9 +491,8 @@ service cloud.firestore {
     }
 
     match /flashTiers/{documentId} {
-      allow read: if isActive()
-        && (ownsAdminScope(resource.data.adminId)
-          || (resource.data.adminId == profile().adminId && resource.data.active == true));
+      allow read: if resource.data.active == true
+        || (isActive() && ownsAdminScope(resource.data.adminId));
       allow create: if isAdmin()
         && ownsAdminScope(request.resource.data.adminId)
         && request.resource.data.keys().hasOnly([
@@ -582,16 +578,6 @@ service cloud.firestore {
 
     match /platformSettings/{documentId} {
       allow read: if true;
-      allow create, update, delete: if isSuperAdmin();
-    }
-
-    match /investmentCalculatorPlans/{documentId} {
-      allow read: if resource.data.status == "Active" || isSuperAdmin();
-      allow create, update, delete: if isSuperAdmin();
-    }
-
-    match /landingInvestmentPlans/{documentId} {
-      allow read: if resource.data.status == "Active" || isSuperAdmin();
       allow create, update, delete: if isSuperAdmin();
     }
 

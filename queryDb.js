@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, getDocs } from "firebase/firestore";
+import { getFirestore, collection, getDocs, query, where } from "firebase/firestore";
 import fs from "fs";
 
 // Manually parse env file
@@ -29,8 +29,8 @@ const db = getFirestore(app);
 async function checkCollections() {
   for (const name of ["coins", "stocks", "flashSettings", "flashTiers"]) {
     try {
-      const snap = await getDocs(collection(db, name));
-      console.log(`Collection "${name}" has ${snap.size} documents.`);
+      const snap = await getDocs(query(collection(db, name), where("active", "==", true)));
+      console.log(`Collection "${name}" has ${snap.size} active documents.`);
       snap.forEach((doc) => {
         console.log(`  Document ${doc.id}:`, JSON.stringify(doc.data()));
       });

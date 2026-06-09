@@ -9,6 +9,7 @@ import { CryptoInvestmentPage, EarningsPage, FlashInvestmentPage, InvestmentsPag
 import { AdminInvestmentsPage, InvestmentLibraryPage } from "./pages/AdminInvestmentPages";
 import { KycPage, NotificationsPage, SupportPage } from "./pages/EnterpriseUserPages";
 import { CompactCompanyPage } from "./pages/CompactCompanyPage";
+import { PublicFaqPage } from "./pages/PublicFaqPage";
 import {
   AnalyticsPage, AnnouncementsAdminPage, KycReviewPage,
 } from "./pages/EnterpriseAdminPages";
@@ -22,7 +23,7 @@ import { AdminSupportInbox } from "./pages/AdminSupportInbox";
 import ProtectedRoute from "./components/ProtectedRoute";
 import DashboardLayout from "./components/DashboardLayout";
 import DashboardHome from "./components/DashboardHome";
-import { Brand } from "./components/UI";
+import { PublicContentLayout } from "./components/PublicContentChrome";
 import { dataService } from "./lib/dataService";
 
 function LegalPage({ privacy = false }) {
@@ -30,17 +31,16 @@ function LegalPage({ privacy = false }) {
   const [document, setDocument] = useState(null);
   useEffect(() => { dataService.list("legalDocuments", "GLOBAL", true).then((items) => setDocument(items.filter((item) => item.type === type && item.published).sort((a, b) => b.version - a.version)[0] || null)); }, [type]);
   return (
-    <div className="min-h-screen bg-stone px-5 py-12">
-      <div className="mx-auto max-w-3xl">
-        <a href="/"><Brand /></a>
-        <div className="glass-card mt-12 p-7 md:p-12">
+    <PublicContentLayout title={privacy ? "Privacy" : "Terms"}>
+      <main className="px-5 py-12">
+        <div className="glass-card mx-auto max-w-3xl p-7 md:p-12">
           <p className="section-kicker">Stonehaven Investment Group</p>
           <h1 className="display-title mt-3 text-4xl text-navy">{document?.title || (privacy ? "Privacy Policy" : "Terms & Conditions")}</h1>
           <p className="mt-3 text-xs text-slate-400">Published version {document?.version || "—"}</p>
           <div className="mt-9 whitespace-pre-wrap text-sm leading-7 text-slate-600">{document?.content || "This document is not currently published."}</div>
         </div>
-      </div>
-    </div>
+      </main>
+    </PublicContentLayout>
   );
 }
 
@@ -54,6 +54,7 @@ export default function App() {
       <Route path="/terms" element={<LegalPage />} />
       <Route path="/privacy" element={<LegalPage privacy />} />
       <Route path="/company" element={<CompactCompanyPage />} />
+      <Route path="/faq" element={<PublicFaqPage />} />
 
       <Route element={<ProtectedRoute roles={["user"]} />}>
         <Route path="/onboarding" element={<OnboardingPage />} />

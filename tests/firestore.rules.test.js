@@ -11,8 +11,11 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
+  query,
   setDoc,
   updateDoc,
+  where,
 } from "firebase/firestore";
 
 const PROJECT_ID = "stonehaven-security-test";
@@ -113,20 +116,31 @@ beforeEach(async () => {
         sourceId: "deposit-a",
         createdAt: "2026-06-09T10:00:00.000Z",
       }),
-      setDoc(doc(db, "investmentCalculatorPlans", "active-calculator"), {
-        planName: "Crypto Growth",
-        status: "Active",
-        displayOrder: 1,
+      setDoc(doc(db, "flashSettings", "active-flash"), {
+        adminId: "ADMIN-A",
+        name: "Flash Investment",
+        durationHours: 24,
+        active: true,
       }),
-      setDoc(doc(db, "investmentCalculatorPlans", "inactive-calculator"), {
-        planName: "Hidden Plan",
-        status: "Inactive",
-        displayOrder: 2,
+      setDoc(doc(db, "flashTiers", "active-flash-tier"), {
+        adminId: "ADMIN-A",
+        capital: 500,
+        returnAmount: 700,
+        active: true,
       }),
-      setDoc(doc(db, "landingInvestmentPlans", "active-card"), {
-        weeklyCapital: 200,
-        status: "Active",
-        displayOrder: 1,
+      setDoc(doc(db, "coins", "active-coin"), {
+        adminId: "ADMIN-A",
+        name: "Bitcoin",
+        ticker: "BTC",
+        tiers: [{ weeklyCapital: 200, return2Months: 87000, return3Months: 88000, active: true }],
+        active: true,
+      }),
+      setDoc(doc(db, "stocks", "inactive-stock"), {
+        adminId: "ADMIN-A",
+        name: "Hidden Stock",
+        ticker: "HID",
+        tiers: [{ weeklyCapital: 200, return2Months: 87000, return3Months: 88000, active: true }],
+        active: false,
       }),
     ]);
   });
@@ -498,42 +512,48 @@ describe("suspended accounts", () => {
   });
 });
 
-describe("public landing content", () => {
-  test("public visitors can read active records but not inactive records", async () => {
+describe("public investment library", () => {
+  test("public visitors can read active library records but not inactive records", async () => {
     const db = environment.unauthenticatedContext().firestore();
-    await assertSucceeds(getDoc(doc(db, "investmentCalculatorPlans", "active-calculator")));
-    await assertSucceeds(getDoc(doc(db, "landingInvestmentPlans", "active-card")));
-    await assertFails(getDoc(doc(db, "investmentCalculatorPlans", "inactive-calculator")));
+    await assertSucceeds(getDoc(doc(db, "flashSettings", "active-flash")));
+    await assertSucceeds(getDoc(doc(db, "flashTiers", "active-flash-tier")));
+    await assertSucceeds(getDoc(doc(db, "coins", "active-coin")));
+    await assertFails(getDoc(doc(db, "stocks", "inactive-stock")));
+    await assertSucceeds(getDocs(query(collection(db, "coins"), where("active", "==", true))));
+    await assertSucceeds(getDocs(query(collection(db, "flashTiers"), where("active", "==", true))));
+    await assertFails(getDocs(collection(db, "stocks")));
   });
 
-  test("normal users cannot modify landing content", async () => {
+  test("normal users cannot modify the investment library", async () => {
     const db = environment.authenticatedContext("user-a", {
       role: "user",
       adminId: "ADMIN-A",
     }).firestore();
-    await assertFails(updateDoc(doc(db, "investmentCalculatorPlans", "active-calculator"), {
-      projectedReturn: 999999,
+    await assertFails(updateDoc(doc(db, "coins", "active-coin"), {
+      tiers: [{ weeklyCapital: 200, return2Months: 999999, return3Months: 999999, active: true }],
     }));
-    await assertFails(addDoc(collection(db, "landingInvestmentPlans"), {
-      weeklyCapital: 500,
-      status: "Active",
-      displayOrder: 2,
+    await assertFails(addDoc(collection(db, "flashTiers"), {
+      adminId: "ADMIN-A",
+      capital: 1000,
+      returnAmount: 1300,
+      active: true,
     }));
   });
 
-  test("super admin can manage both landing collections", async () => {
+  test("super admin can manage the investment library", async () => {
     const db = environment.authenticatedContext("super", {
       role: "superadmin",
       adminId: "GLOBAL",
     }).firestore();
-    await assertSucceeds(updateDoc(doc(db, "investmentCalculatorPlans", "active-calculator"), {
-      projectedReturn: 1000,
+    await assertSucceeds(updateDoc(doc(db, "coins", "active-coin"), {
+      tiers: [{ weeklyCapital: 200, return2Months: 90000, return3Months: 92000, active: true }],
     }));
-    await assertSucceeds(addDoc(collection(db, "landingInvestmentPlans"), {
-      weeklyCapital: 500,
-      status: "Active",
-      displayOrder: 2,
+    await assertSucceeds(addDoc(collection(db, "flashTiers"), {
+      adminId: "ADMIN-A",
+      capital: 1000,
+      returnAmount: 1300,
+      active: true,
     }));
-    await assertSucceeds(deleteDoc(doc(db, "landingInvestmentPlans", "active-card")));
+    await assertSucceeds(deleteDoc(doc(db, "flashTiers", "active-flash-tier")));
   });
 });

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Building2, FileText, Image, Settings, Sparkles } from "lucide-react";
 import { PageHeader } from "../components/UI";
-import { LandingContentAdmin } from "../components/LandingContentAdmin";
 import { PlatformBrandingPage } from "./AdminPages";
 import {
   CompanyAdminPage,
@@ -45,7 +44,7 @@ export function CompanySettingsPage() {
         </div>
       </div>
 
-      {active === "content" && <><ContentAdminPage /><LandingContentAdmin /></>}
+      {active === "content" && <ContentAdminPage />}
       {active === "branding" && <PlatformBrandingPage />}
       {active === "platform" && <PlatformSettingsPage />}
       {active === "company" && <CompanyAdminPage />}

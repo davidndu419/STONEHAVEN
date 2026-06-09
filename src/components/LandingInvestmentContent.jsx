@@ -4,44 +4,90 @@ import { Link } from "react-router-dom";
 import { dataService } from "../lib/dataService";
 
 const money = (value) => `$${Number(value || 0).toLocaleString()}`;
-const normalizedType = (value) => String(value || "").toLowerCase();
+let libraryRequest;
+let libraryRequestedAt = 0;
+
+function loadPublicLibrary() {
+  if (!libraryRequest || Date.now() - libraryRequestedAt > 30000) {
+    libraryRequestedAt = Date.now();
+    libraryRequest = Promise.all([
+      dataService.listPublic("flashSettings"),
+      dataService.listPublic("flashTiers"),
+      dataService.listPublic("coins"),
+      dataService.listPublic("stocks"),
+    ]).then(([flashSettings, flashTiers, coins, stocks]) => ({
+      flashSettings: flashSettings[0] || null,
+      flashTiers: flashTiers.sort((a, b) => Number(a.capital) - Number(b.capital)),
+      coins: coins
+        .map((asset) => ({ ...asset, tiers: (asset.tiers || []).filter((tier) => tier.active).sort((a, b) => Number(a.weeklyCapital) - Number(b.weeklyCapital)) }))
+        .filter((asset) => asset.tiers.length)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+      stocks: stocks
+        .map((asset) => ({ ...asset, tiers: (asset.tiers || []).filter((tier) => tier.active).sort((a, b) => Number(a.weeklyCapital) - Number(b.weeklyCapital)) }))
+        .filter((asset) => asset.tiers.length)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    })).catch((error) => {
+      libraryRequest = undefined;
+      throw error;
+    });
+  }
+  return libraryRequest;
+}
+
+function usePublicInvestmentLibrary() {
+  const [library, setLibrary] = useState({ flashSettings: null, flashTiers: [], coins: [], stocks: [] });
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let active = true;
+    loadPublicLibrary()
+      .then((result) => { if (active) setLibrary(result); })
+      .catch(() => {})
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
+  return { ...library, loading };
+}
+
+function registrationLink({ type, asset, capital, duration }) {
+  const params = new URLSearchParams({ planType: type });
+  if (asset) params.set("asset", asset);
+  if (capital) params.set(type === "flash" ? "capital" : "weeklyCapital", capital);
+  if (duration) params.set("duration", duration);
+  return `/register?${params.toString()}`;
+}
 
 export function ManagedInvestmentCalculator() {
-  const [plans, setPlans] = useState([]);
+  const { flashSettings, flashTiers, coins, stocks, loading } = usePublicInvestmentLibrary();
+  const availableTypes = useMemo(() => [
+    ...(flashSettings && flashTiers.length ? ["flash"] : []),
+    ...(coins.length ? ["crypto"] : []),
+    ...(stocks.length ? ["stock"] : []),
+  ], [coins.length, flashSettings, flashTiers.length, stocks.length]);
   const [type, setType] = useState("");
-  const [planId, setPlanId] = useState("");
-  const [capital, setCapital] = useState(0);
+  const [assetId, setAssetId] = useState("");
+  const [tierCapital, setTierCapital] = useState("");
+  const [duration, setDuration] = useState(3);
 
   useEffect(() => {
-    dataService.listPublic("investmentCalculatorPlans").then((items) => {
-      const sorted = items.sort((a, b) => Number(a.displayOrder) - Number(b.displayOrder));
-      setPlans(sorted);
-      const firstType = normalizedType(sorted[0]?.planType);
-      setType(firstType);
-      setPlanId(sorted[0]?.id || "");
-      setCapital(Number(sorted[0]?.defaultCapital || 0));
-    });
-  }, []);
+    if (!type && availableTypes.length) setType(availableTypes[0]);
+  }, [availableTypes, type]);
 
-  const types = useMemo(() => [...new Set(plans.map((item) => normalizedType(item.planType)))], [plans]);
-  const typePlans = plans.filter((item) => normalizedType(item.planType) === type);
-  const selected = typePlans.find((item) => item.id === planId) || typePlans[0];
-  const projected = Number(selected?.projectedReturn || 0);
-  const profit = projected - Number(capital || 0);
+  const assets = useMemo(() => type === "crypto" ? coins : type === "stock" ? stocks : [], [coins, stocks, type]);
+  const asset = assets.find((item) => item.id === assetId) || assets[0];
+  const tiers = type === "flash" ? flashTiers : asset?.tiers || [];
+  const tier = tiers.find((item) => Number(item.capital ?? item.weeklyCapital) === Number(tierCapital)) || tiers[0];
+
+  useEffect(() => {
+    if (assets.length && !assets.some((item) => item.id === assetId)) setAssetId(assets[0].id);
+  }, [assetId, assets]);
+
+  const capital = type === "flash" ? Number(tier?.capital || 0) : Number(tier?.weeklyCapital || 0) * (duration === 2 ? 8 : 13);
+  const projectedReturn = type === "flash"
+    ? Number(tier?.returnAmount || 0)
+    : Number(duration === 2 ? tier?.return2Months : tier?.return3Months) || 0;
+  const profit = projectedReturn - capital;
   const roi = capital > 0 ? (profit / capital) * 100 : 0;
-
-  function selectType(nextType) {
-    const first = plans.find((item) => normalizedType(item.planType) === nextType);
-    setType(nextType);
-    setPlanId(first?.id || "");
-    setCapital(Number(first?.defaultCapital || 0));
-  }
-
-  function selectPlan(nextId) {
-    const next = plans.find((item) => item.id === nextId);
-    setPlanId(nextId);
-    setCapital(Number(next?.defaultCapital || 0));
-  }
+  const hasPlans = availableTypes.length > 0;
 
   return (
     <section className="bg-navy px-5 py-28 text-white">
@@ -49,23 +95,23 @@ export function ManagedInvestmentCalculator() {
         <div className="max-w-2xl">
           <p className="section-kicker">Investment calculator</p>
           <h2 className="display-title mt-3 text-3xl sm:text-4xl md:text-5xl">Model your plan before you begin.</h2>
-          <p className="mt-4 text-sm leading-7 text-white/55 md:text-base">Review the active plan schedule and projected outcome before creating your account.</p>
+          <p className="mt-4 text-sm leading-7 text-white/55 md:text-base">Calculations use the active plans currently published in the Stonehaven Investment Library.</p>
         </div>
         <div className="dark-glass p-7">
-          {plans.length ? (
+          {!loading && hasPlans && tier ? (
             <>
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div><label className="mb-2 block text-[10px] uppercase tracking-widest text-white/35">Plan type</label><select className="w-full rounded-xl border border-white/10 bg-white/[.07] px-4 py-3" value={type} onChange={(event) => selectType(event.target.value)}>{types.map((item) => <option className="text-navy" key={item} value={item}>{item}</option>)}</select></div>
-                <div><label className="mb-2 block text-[10px] uppercase tracking-widest text-white/35">Plan</label><select className="w-full rounded-xl border border-white/10 bg-white/[.07] px-4 py-3" value={selected?.id || ""} onChange={(event) => selectPlan(event.target.value)}>{typePlans.map((item) => <option className="text-navy" key={item.id} value={item.id}>{item.displayLabel || item.planName}</option>)}</select></div>
-                <div><label className="mb-2 block text-[10px] uppercase tracking-widest text-white/35">Capital</label><input className="w-full rounded-xl border border-white/10 bg-white/[.07] px-4 py-3" type="number" min={selected?.minCapital || 0} max={selected?.maxCapital || undefined} value={capital} onChange={(event) => setCapital(Number(event.target.value))} /></div>
+              <div className={`grid gap-4 ${type === "flash" ? "sm:grid-cols-2" : "sm:grid-cols-4"}`}>
+                <div><label className="mb-2 block text-[10px] uppercase tracking-widest text-white/35">Plan type</label><select className="w-full rounded-xl border border-white/10 bg-white/[.07] px-4 py-3 capitalize" value={type} onChange={(event) => { setType(event.target.value); setAssetId(""); setTierCapital(""); }}><option className="text-navy" value="flash" disabled={!flashSettings || !flashTiers.length}>Flash</option><option className="text-navy" value="crypto" disabled={!coins.length}>Crypto</option><option className="text-navy" value="stock" disabled={!stocks.length}>Stock</option></select></div>
+                {type !== "flash" && <div><label className="mb-2 block text-[10px] uppercase tracking-widest text-white/35">Asset</label><select className="w-full rounded-xl border border-white/10 bg-white/[.07] px-4 py-3" value={asset?.id || ""} onChange={(event) => { setAssetId(event.target.value); setTierCapital(""); }} >{assets.map((item) => <option className="text-navy" key={item.id} value={item.id}>{item.name} ({item.ticker})</option>)}</select></div>}
+                <div><label className="mb-2 block text-[10px] uppercase tracking-widest text-white/35">{type === "flash" ? "Capital" : "Weekly capital"}</label><select className="w-full rounded-xl border border-white/10 bg-white/[.07] px-4 py-3" value={tier?.capital ?? tier?.weeklyCapital ?? ""} onChange={(event) => setTierCapital(event.target.value)}>{tiers.map((item) => { const value = item.capital ?? item.weeklyCapital; return <option className="text-navy" key={value} value={value}>{money(value)}</option>; })}</select></div>
+                {type !== "flash" && <div><label className="mb-2 block text-[10px] uppercase tracking-widest text-white/35">Duration</label><select className="w-full rounded-xl border border-white/10 bg-white/[.07] px-4 py-3" value={duration} onChange={(event) => setDuration(Number(event.target.value))}><option className="text-navy" value={2}>2 months</option><option className="text-navy" value={3}>3 months</option></select></div>}
               </div>
-              {selected?.description && <p className="mt-4 text-sm leading-6 text-white/50">{selected.description}</p>}
               <div className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-white/10 sm:grid-cols-5">
-                {[["Capital", money(capital)], ["Duration", `${selected?.durationValue} ${selected?.durationType}`], ["Projected return", money(projected)], ["Profit", money(profit)], ["ROI", `${roi.toFixed(1)}%`]].map(([label, value]) => <div key={label} className="bg-navy p-4"><p className="text-[9px] uppercase tracking-widest text-white/35">{label}</p><p className="mt-2 font-display text-lg font-bold text-gold">{value}</p></div>)}
+                {[["Capital", money(capital)], ["Duration", type === "flash" ? `${flashSettings.durationHours} hours` : `${duration} months`], ["Projected return", money(projectedReturn)], ["Profit", money(profit)], ["ROI", `${roi.toFixed(1)}%`]].map(([label, value]) => <div key={label} className="bg-navy p-4"><p className="text-[9px] uppercase tracking-widest text-white/35">{label}</p><p className="mt-2 font-display text-lg font-bold text-gold">{value}</p></div>)}
               </div>
-              <Link to={`/register?planType=${encodeURIComponent(type)}&capital=${encodeURIComponent(capital)}`} className="btn-primary mt-6 w-full">Start earning now <ArrowRight size={16} /></Link>
+              <Link to={registrationLink({ type, asset: asset?.id, capital: tier?.capital ?? tier?.weeklyCapital, duration: type === "flash" ? flashSettings.durationHours : duration })} className="btn-primary mt-6 w-full">Start earning now <ArrowRight size={16} /></Link>
             </>
-          ) : <p className="rounded-xl border border-white/10 bg-white/[.04] p-6 text-sm text-white/55">Calculator plans are being updated. Please check back shortly.</p>}
+          ) : <p className="rounded-xl border border-white/10 bg-white/[.04] p-6 text-sm text-white/55">{loading ? "Loading active plans..." : "Calculator plans are being updated. Please check back shortly."}</p>}
         </div>
       </div>
     </section>
@@ -73,46 +119,42 @@ export function ManagedInvestmentCalculator() {
 }
 
 export function ManagedInvestmentPlans() {
-  const [plans, setPlans] = useState([]);
+  const { coins, stocks, loading } = usePublicInvestmentLibrary();
   const [type, setType] = useState("crypto");
+  const [assetId, setAssetId] = useState("");
+  const assets = useMemo(() => type === "crypto" ? coins : stocks, [coins, stocks, type]);
+  const asset = assets.find((item) => item.id === assetId) || assets[0];
+  const tiers = asset?.tiers || [];
 
   useEffect(() => {
-    dataService.listPublic("landingInvestmentPlans").then((items) => {
-      setPlans(items.sort((a, b) => Number(a.displayOrder) - Number(b.displayOrder)));
-    });
-  }, []);
-
-  const visible = plans.filter((item) => {
-    const itemType = normalizedType(item.planType);
-    return itemType === type || itemType === "both";
-  });
+    if (assets.length && !assets.some((item) => item.id === assetId)) setAssetId(assets[0].id);
+  }, [assetId, assets]);
 
   return (
     <section id="plans" className="bg-white px-5 py-28">
       <div className="mx-auto max-w-6xl">
         <p className="section-kicker">Investment plans</p>
         <h2 className="display-title mt-3 text-3xl text-navy sm:text-4xl md:text-5xl">Clarity at every horizon.</h2>
-        <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-500 md:text-base">Select a weekly capital commitment and review the projected maturity value before you begin.</p>
-        <div className="mt-8 flex gap-2">
-          {["crypto", "stock"].map((item) => <button key={item} onClick={() => setType(item)} className={`rounded-full px-5 py-2 text-xs font-bold capitalize ${type === item ? "bg-navy text-white" : "bg-stone text-slate-500"}`}>{item}</button>)}
+        <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-500 md:text-base">Select a weekly commitment from the active plans published in our Investment Library.</p>
+        <div className="mt-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+          <div className="flex gap-2">{["crypto", "stock"].map((item) => <button key={item} onClick={() => { setType(item); setAssetId(""); }} className={`rounded-full px-5 py-2 text-xs font-bold capitalize ${type === item ? "bg-navy text-white" : "bg-stone text-slate-500"}`}>{item}</button>)}</div>
+          {assets.length > 0 && <div className="w-full sm:max-w-xs"><label className="label">Select {type === "crypto" ? "coin" : "stock"}</label><select className="field bg-white" value={asset?.id || ""} onChange={(event) => setAssetId(event.target.value)}>{assets.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.ticker})</option>)}</select></div>}
         </div>
-        {visible.length ? (
+        {tiers.length ? (
           <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-            {visible.map((plan) => (
-              <article key={plan.id} className="glass-card relative flex flex-col p-4 sm:p-5">
-                {plan.badgeLabel && <span className="mb-3 w-fit rounded-full bg-gold/10 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-gold">{plan.badgeLabel}</span>}
+            {tiers.map((tier) => (
+              <article key={tier.weeklyCapital} className="glass-card flex flex-col p-4 sm:p-5">
                 <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Weekly Capital</p>
-                <p className="font-display text-xl font-bold text-navy sm:text-2xl">{money(plan.weeklyCapital)}</p>
+                <p className="font-display text-xl font-bold text-navy sm:text-2xl">{money(tier.weeklyCapital)}</p>
                 <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
-                  <div><p className="text-[9px] uppercase tracking-wider text-slate-400">2 Months (8 Weeks)</p><p className="font-display font-semibold text-slate-700">{money(plan.twoMonthReturn)}</p></div>
-                  <div><p className="text-[9px] uppercase tracking-wider text-slate-400">3 Months (13 Weeks)</p><p className="font-display font-semibold text-slate-700">{money(plan.threeMonthReturn)}</p></div>
+                  <div><p className="text-[9px] uppercase tracking-wider text-slate-400">2 Months (8 Weeks)</p><p className="font-display font-semibold text-slate-700">{money(tier.return2Months)}</p></div>
+                  <div><p className="text-[9px] uppercase tracking-wider text-slate-400">3 Months (13 Weeks)</p><p className="font-display font-semibold text-slate-700">{money(tier.return3Months)}</p></div>
                 </div>
-                {plan.description && <p className="mt-3 line-clamp-2 text-xs leading-5 text-slate-400">{plan.description}</p>}
-                <Link to={`/register?planType=${encodeURIComponent(type)}&weeklyCapital=${encodeURIComponent(plan.weeklyCapital)}`} className="btn-primary mt-auto pt-3">Select</Link>
+                <Link to={registrationLink({ type, asset: asset.id, capital: tier.weeklyCapital })} className="btn-primary mt-4">Select</Link>
               </article>
             ))}
           </div>
-        ) : <p className="mt-8 rounded-xl bg-stone p-6 text-sm text-slate-500">No active {type} plans are currently published.</p>}
+        ) : <p className="mt-8 rounded-xl bg-stone p-6 text-sm text-slate-500">{loading ? "Loading active plans..." : `No active ${type} plans are currently published.`}</p>}
         <p className="mt-4 text-xs leading-5 text-slate-400">Illustrative plan values are subject to the applicable plan agreement and risk disclosures.</p>
       </div>
     </section>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { MapPin } from "lucide-react";
 import { dataService } from "../lib/dataService";
 import { Modal } from "../components/UI";
+import { PublicContentLayout } from "../components/PublicContentChrome";
 
 export function CompactCompanyPage() {
   const [company, setCompany] = useState(null);
@@ -19,7 +20,7 @@ export function CompactCompanyPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-stone">
+    <PublicContentLayout title="Company">
       <section className="bg-navy px-5 py-20 text-white">
         <div className="mx-auto max-w-6xl">
           <p className="section-kicker">Our institution</p>
@@ -57,6 +58,6 @@ export function CompactCompanyPage() {
       <Modal open={Boolean(selected)} onClose={() => setSelected(null)} title={selected?.name || "Leadership profile"}>
         {selected && <div className="space-y-4 text-sm leading-6 text-slate-600"><p className="font-bold text-gold">{selected.position}</p>{selected.previousCompanies && <div><p className="label">Experience</p><p>{selected.previousCompanies}</p></div>}{selected.education && <div><p className="label">Education</p><p>{selected.education}</p></div>}<p><strong>Location:</strong> {selected.location}</p>{selected.linkedin && <a href={selected.linkedin} target="_blank" rel="noreferrer" className="font-bold text-gold">LinkedIn profile</a>}</div>}
       </Modal>
-    </div>
+    </PublicContentLayout>
   );
 }
